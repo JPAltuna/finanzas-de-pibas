@@ -140,7 +140,8 @@
     font-size: .72rem; font-weight: 700; color: var(--suave); font-family: inherit;
     border-top: 3px solid transparent;
   }
-  nav button .ico { display: block; font-size: 1.3rem; margin-bottom: 2px; }
+  nav button .ico { display: block; margin: 0 auto 3px; }
+  nav button .ico svg { width: 22px; height: 22px; display: block; margin: 0 auto; fill: currentColor; }
   nav button.activo { color: var(--tinta); border-top-color: var(--kraft); }
   .pantalla { display: none; }
   .pantalla.activa { display: block; }
@@ -305,10 +306,10 @@
 </main>
 
 <nav id="tabs">
-  <button data-p="gastos" class="activo"><span class="ico">🍂</span>Gastos</button>
-  <button data-p="ingresos"><span class="ico">🌾</span>Ingresos</button>
-  <button data-p="inversiones"><span class="ico">🌱</span>Inversiones</button>
-  <button data-p="analisis"><span class="ico">🪵</span>Análisis</button>
+  <button data-p="gastos" class="activo"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M2 5.5h20a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm-7.5 2.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm15 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg></span>Gastos</button>
+  <button data-p="ingresos"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7H3.5a1 1 0 0 1 0-2H18a1 1 0 0 0 0-2H3.5A2.5 2.5 0 0 0 1 5.5V18a3 3 0 0 0 3 3h17a2 2 0 0 0 2-2v-4h-7.5a2.5 2.5 0 0 1 0-5H23V9a2 2 0 0 0-2-2z"/><path fill-rule="evenodd" d="M15.5 12H23v4h-7.5a2 2 0 0 1 0-4zm1.5.9a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg></span>Ingresos</button>
+  <button data-p="inversiones"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 21v-8h4v8H2zm7 0V9h4v12H9zm7 0v-6h4v6h-4z"/><path d="M15 2h7v7l-2.4-2.4-5.4 5.4-2.2-2.2 5.4-5.4L15 2z"/></svg></span>Inversiones</button>
+  <button data-p="analisis"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2a9.5 9.5 0 0 1 8.5 8.5h-8.5V2z"/><path d="M10.5 4.5a9 9 0 1 0 9 10.5h-9V4.5z"/></svg></span>Análisis</button>
 </nav>
 
 <script>
