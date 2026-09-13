@@ -5,25 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Finanzas de pibas</title>
 <meta name="description" content="Registrá tus gastos, ingresos e inversiones en tu propia planilla de Google.">
-<meta name="theme-color" content="#2e2b27">
+<meta name="theme-color" content="#57666a">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
-  /* ─── Wabi-Sabi: papel, kraft, carbón, oliva, terracota ─── */
+  /* ─── Wabi-Sabi: salvia #93a191 + piedra #919fa1, letras hueso ─── */
   :root {
-    --papel: #ece6db;
-    --crema: #f6f1e8;
-    --carbon: #2e2b27;
-    --tinta: #3b362f;
-    --suave: #8a7d6a;
-    --borde: #dcd2c1;
-    --kraft: #a67c52;
-    --kraft-osc: #8a6542;
-    --oliva: #6e7250;
-    --terracota: #9c4a32;
-    --ocre: #a3762e;
-    --sombra: 0 1px 6px rgba(62, 50, 35, .10);
+    --papel: #93a191;        /* fondo: salvia */
+    --crema: #6e7b6e;        /* tarjetas: salvia profunda */
+    --carbon: #57666a;       /* header/nav: piedra oscura */
+    --tinta: #f4f1e6;        /* letras: blanco hueso */
+    --suave: #dde2d3;        /* letras secundarias */
+    --borde: rgba(244, 241, 230, .28);
+    --kraft: #919fa1;        /* acento: piedra */
+    --kraft-osc: #7c898b;
+    --oliva: #dce4c2;        /* ingresos */
+    --terracota: #f0b9a4;    /* gastos */
+    --ocre: #ecd3a0;         /* dólares */
+    --sombra: 0 1px 6px rgba(40, 50, 46, .20);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { -webkit-text-size-adjust: 100%; }
@@ -61,9 +61,9 @@
     display: none; margin-bottom: 12px; padding: 10px 14px;
     border-radius: 12px 4px 12px 4px; font-size: .9rem; font-weight: 600;
   }
-  #aviso.ok { display: block; background: #e2e4d4; color: #454a2e; }
-  #aviso.error { display: block; background: #eddcd4; color: #6e3020; }
-  #aviso.info { display: block; background: #e7ddcd; color: #6b5334; }
+  #aviso.ok { display: block; background: #5c6e5f; color: #eaf0dd; }
+  #aviso.error { display: block; background: #8a5744; color: #f8e9e0; }
+  #aviso.info { display: block; background: #6a7477; color: #eef0e9; }
 
   /* Tarjetas y formularios */
   .card {
@@ -73,14 +73,14 @@
   }
   .card h2 {
     font-family: Georgia, 'Times New Roman', serif;
-    font-size: 1.05rem; font-weight: 700; margin-bottom: 12px; color: var(--carbon);
+    font-size: 1.05rem; font-weight: 700; margin-bottom: 12px; color: var(--tinta);
     border-bottom: 1px dashed var(--borde); padding-bottom: 8px;
   }
   label { display: block; font-size: .76rem; font-weight: 700; color: var(--suave); margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .8px; }
   input, select, textarea {
     width: 100%; padding: 12px 14px; border: 1.5px solid var(--borde);
     border-radius: 10px 3px 10px 3px;
-    font-size: 1rem; font-family: inherit; background: #fbf8f2; color: var(--tinta);
+    font-size: 1rem; font-family: inherit; background: #61705f; color: var(--tinta);
   }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--kraft); border-color: transparent; }
   .fila2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -93,11 +93,11 @@
   }
   .btn:active { transform: scale(.98); background: var(--kraft-osc); }
   .btn:disabled { opacity: .55; }
-  .btn.secundario { background: transparent; color: var(--kraft-osc); border: 2px solid var(--kraft); }
+  .btn.secundario { background: transparent; color: var(--tinta); border: 2px solid var(--kraft); }
   .toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .toggle button {
     padding: 11px; border-radius: 10px 3px 10px 3px; border: 1.5px solid var(--borde);
-    background: #fbf8f2; font-size: .95rem; font-weight: 700; color: var(--suave);
+    background: #61705f; font-size: .95rem; font-weight: 700; color: var(--suave);
     cursor: pointer; font-family: inherit;
   }
   .toggle button.activo { background: var(--carbon); border-color: var(--carbon); color: #efe8da; }
@@ -123,8 +123,8 @@
   .kpi b { font-size: 1rem; }
   .barra { margin: 8px 0; }
   .barra .info { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: 3px; }
-  .barra .pista { height: 9px; background: #e3dbcc; border-radius: 99px; overflow: hidden; }
-  .barra .relleno { height: 100%; border-radius: 99px; background: var(--kraft); }
+  .barra .pista { height: 9px; background: rgba(30, 40, 36, .25); border-radius: 99px; overflow: hidden; }
+  .barra .relleno { height: 100%; border-radius: 99px; background: var(--suave); }
   #mesSelector { margin-bottom: 14px; }
 
   /* Tabs abajo */
@@ -141,16 +141,16 @@
     border-top: 3px solid transparent;
   }
   nav button .ico { display: block; font-size: 1.3rem; margin-bottom: 2px; }
-  nav button.activo { color: var(--kraft-osc); border-top-color: var(--kraft); }
+  nav button.activo { color: var(--tinta); border-top-color: var(--kraft); }
   .pantalla { display: none; }
   .pantalla.activa { display: block; }
 
   #pendientesAviso {
     display: none; margin-bottom: 12px; padding: 10px 14px;
-    border-radius: 12px 4px 12px 4px; background: #e7ddcd; color: #6b5334;
+    border-radius: 12px 4px 12px 4px; background: #74705c; color: #f4f0e0;
     font-size: .88rem; font-weight: 600;
   }
-  #pendientesAviso button { margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px 3px 10px 3px; border: none; background: var(--kraft-osc); color: #f6f1e8; font-weight: 800; cursor: pointer; }
+  #pendientesAviso button { margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px 3px 10px 3px; border: none; background: var(--carbon); color: #f4f1e6; font-weight: 800; cursor: pointer; }
   .vacio { text-align: center; color: var(--suave); padding: 18px 0; font-size: .9rem; font-style: italic; }
 </style>
 </head>
