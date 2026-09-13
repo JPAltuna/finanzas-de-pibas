@@ -66,6 +66,7 @@ function doPost(e) {
     if (accion === 'gasto') out = agregarFila('GASTOS', body, ['fecha', 'monto', 'categoria', 'medio', 'nota']);
     else if (accion === 'ingreso') out = agregarFila('INGRESOS', body, ['fecha', 'monto', 'categoria', 'cuenta', 'nota']);
     else if (accion === 'inversion') out = agregarFila('INVERSIONES', body, ['fecha', 'tipo', 'plataforma', 'activo', 'monto_usd', 'cantidad', 'nota']);
+    else if (accion === 'config_nueva') out = configAgregar(body.lista, body.valor);
     else out = { ok: false, error: 'Acción desconocida: ' + accion };
   } catch (err) {
     out = { ok: false, error: String(err && err.message || err) };
@@ -164,6 +165,35 @@ function agregarFila(nombre, body, campos) {
   fila.push(new Date());
   h.getRange(h.getLastRow() + 1, 1, 1, fila.length).setValues([fila]);
   return { ok: true, id: id };
+}
+
+// Agrega una categoría o cuenta nueva a la pestaña CONFIG (desde la app).
+// Para sacar opciones que no usás, borrá la celda directamente en CONFIG.
+var CONFIG_COLUMNAS = {
+  categoriasGastos: 'CATEGORIAS GASTOS',
+  categoriasIngresos: 'CATEGORIAS INGRESOS',
+  cuentas: 'CUENTAS'
+};
+function configAgregar(lista, valor) {
+  var nombreCol = CONFIG_COLUMNAS[String(lista || '')];
+  valor = String(valor || '').trim();
+  if (!nombreCol) return { ok: false, error: 'Lista desconocida: ' + lista };
+  if (!valor) return { ok: false, error: 'Falta el valor' };
+  var h = hojaConfig();
+  var datos = h.getDataRange().getValues();
+  var col = -1;
+  for (var c = 0; c < datos[0].length; c++) {
+    if (String(datos[0][c]).trim() === nombreCol) { col = c; break; }
+  }
+  if (col < 0) return { ok: false, error: 'No encontré la columna ' + nombreCol + ' en CONFIG' };
+  var ultima = 1;
+  for (var f = 1; f < datos.length; f++) {
+    var v = String(datos[f][col] || '').trim();
+    if (v.toLowerCase() === valor.toLowerCase()) return { ok: true, valor: v, repetido: true };
+    if (v) ultima = f + 1;
+  }
+  h.getRange(ultima + 1, col + 1).setValue(valor);
+  return { ok: true, valor: valor };
 }
 
 function existeId(id, nombre) {

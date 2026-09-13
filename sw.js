@@ -1,5 +1,5 @@
 /* Finanzas de pibas — service worker: cachea la app para que abra sin internet */
-var CACHE = 'fdp-v1';
+var CACHE = 'fdp-v2';
 var CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
