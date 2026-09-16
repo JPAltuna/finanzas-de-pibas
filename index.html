@@ -23,6 +23,7 @@
     --oliva: #dce4c2;        /* ingresos */
     --terracota: #f0b9a4;    /* gastos */
     --ocre: #ecd3a0;         /* dólares */
+    --amarillo: #f6e7a9;     /* balance y diferenciaciones */
     --sombra: 0 1px 6px rgba(40, 50, 46, .20);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -166,6 +167,20 @@
     background: none; border: none; color: var(--terracota); font-size: 1rem;
     font-weight: 800; cursor: pointer; padding: 0 2px; line-height: 1;
   }
+
+  /* Detalle desplegable de una categoría (análisis) */
+  .barra.clickeable { cursor: pointer; }
+  .detalleCat { display: none; margin: 2px 0 10px; padding: 4px 12px; background: rgba(30, 40, 36, .16); border-radius: 8px 3px 8px 3px; }
+  .detalleCat.abierto { display: block; }
+  .detalleCat .mov { padding: 8px 0; font-size: .88rem; }
+
+  /* Torta fijos vs variables */
+  .torta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .torta svg { width: 128px; height: 128px; flex: none; }
+  .leyenda { flex: 1; min-width: 150px; }
+  .leyenda .item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: .9rem; }
+  .leyenda .cuadr { width: 13px; height: 13px; border-radius: 4px 1px 4px 1px; flex: none; }
+  .leyenda b { margin-left: auto; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -215,15 +230,25 @@
   <section class="pantalla" id="p-gastos">
     <div class="card">
       <h2>Registrar un gasto</h2>
+      <label>Moneda</label>
+      <div class="toggle" id="gMoneda">
+        <button type="button" data-v="ARS" class="activo">$ Pesos</button>
+        <button type="button" data-v="USD">US$ Dólar / USDT</button>
+      </div>
       <div class="fila2">
         <div>
           <label for="gFecha">Fecha</label>
           <input id="gFecha" type="date">
         </div>
         <div>
-          <label for="gMonto">Monto ($)</label>
+          <label for="gMonto" id="gMontoLabel">Monto ($)</label>
           <input id="gMonto" type="number" class="monto-grande" inputmode="decimal" min="0" step="0.01" placeholder="0">
         </div>
+      </div>
+      <div id="gUsdExtra" hidden>
+        <label for="gCotiz">¿A cuánto está el dólar? ($ por US$)</label>
+        <input id="gCotiz" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Ej: 1480">
+        <p class="hint" id="gEquiv">Se guarda también el equivalente en pesos para el análisis.</p>
       </div>
       <label for="gCategoria">Categoría</label>
       <select id="gCategoria"></select>
@@ -249,15 +274,25 @@
   <section class="pantalla" id="p-ingresos">
     <div class="card">
       <h2>Registrar un ingreso</h2>
+      <label>Moneda</label>
+      <div class="toggle" id="iMoneda">
+        <button type="button" data-v="ARS" class="activo">$ Pesos</button>
+        <button type="button" data-v="USD">US$ Dólar / USDT</button>
+      </div>
       <div class="fila2">
         <div>
           <label for="iFecha">Fecha</label>
           <input id="iFecha" type="date">
         </div>
         <div>
-          <label for="iMonto">Monto ($)</label>
+          <label for="iMonto" id="iMontoLabel">Monto ($)</label>
           <input id="iMonto" type="number" class="monto-grande" inputmode="decimal" min="0" step="0.01" placeholder="0">
         </div>
+      </div>
+      <div id="iUsdExtra" hidden>
+        <label for="iCotiz">¿A cuánto está el dólar? ($ por US$)</label>
+        <input id="iCotiz" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Ej: 1480">
+        <p class="hint" id="iEquiv">Se guarda también el equivalente en pesos para el análisis.</p>
       </div>
       <label for="iCategoria">Categoría</label>
       <select id="iCategoria"></select>
@@ -368,6 +403,8 @@ var estado = {
   pendientes: lsGet(LS.pendientes, []),
   tipoInversion: 'Compra',
   tipoGasto: 'Variable',
+  monedaGasto: 'ARS',
+  monedaIngreso: 'ARS',
   sincronizando: false
 };
 
@@ -392,8 +429,8 @@ function ahora() {
 // ═══════════════ Esquemas: la app define las hojas y columnas ═══════════════
 // (el conector es genérico y solo obedece; las mejoras futuras se hacen acá)
 var ESQUEMAS = {
-  GASTOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'TIPO', 'MEDIO', 'NOTA', 'REGISTRADO'],
-  INGRESOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'CUENTA', 'NOTA', 'REGISTRADO'],
+  GASTOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'TIPO', 'MEDIO', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO_USD', 'COTIZACION'],
+  INGRESOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'CUENTA', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO_USD', 'COTIZACION'],
   INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO']
 };
 var CONFIG_COLS = {
@@ -714,16 +751,51 @@ document.querySelectorAll('#gTipo button').forEach(function (b) {
     document.querySelectorAll('#gTipo button').forEach(function (x) { x.classList.toggle('activo', x === b); });
   });
 });
+
+// ═══════════════ Moneda ($ o US$) en gastos e ingresos ═══════════════
+function armarMoneda(pfx, claveEstado) {
+  function refrescar() {
+    var esUsd = estado[claveEstado] === 'USD';
+    $(pfx + 'MontoLabel').textContent = esUsd ? 'Monto (US$)' : 'Monto ($)';
+    $(pfx + 'UsdExtra').hidden = !esUsd;
+    var monto = parseFloat($(pfx + 'Monto').value);
+    var cotiz = parseFloat($(pfx + 'Cotiz').value);
+    $(pfx + 'Equiv').textContent = (esUsd && monto > 0 && cotiz > 0)
+      ? 'Equivale a ' + fmtARS.format(monto * cotiz) + ' (se guarda así para el análisis).'
+      : 'Se guarda también el equivalente en pesos para el análisis.';
+  }
+  document.querySelectorAll('#' + pfx + 'Moneda button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      estado[claveEstado] = b.dataset.v;
+      document.querySelectorAll('#' + pfx + 'Moneda button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+      refrescar();
+    });
+  });
+  $(pfx + 'Monto').addEventListener('input', refrescar);
+  $(pfx + 'Cotiz').addEventListener('input', refrescar);
+}
+armarMoneda('g', 'monedaGasto');
+armarMoneda('i', 'monedaIngreso');
+// Devuelve {MONTO, MONEDA, MONTO_USD, COTIZACION} o null si falta la cotización
+function montosSegunMoneda(pfx, claveEstado, montoInput) {
+  if (estado[claveEstado] !== 'USD') return { MONTO: montoInput, MONEDA: 'ARS', MONTO_USD: '', COTIZACION: '' };
+  var cotiz = parseFloat($(pfx + 'Cotiz').value);
+  if (!(cotiz > 0)) return null;
+  return { MONTO: Math.round(montoInput * cotiz * 100) / 100, MONEDA: 'USD', MONTO_USD: montoInput, COTIZACION: cotiz };
+}
 $('btnGasto').addEventListener('click', function () {
   var monto = parseFloat($('gMonto').value);
   if (!$('gFecha').value) return aviso('error', 'Poné la fecha del gasto.');
   if (!(monto > 0)) return aviso('error', 'Poné el monto del gasto.');
   if ($('gCategoria').value === NUEVA || $('gMedio').value === NUEVA) return aviso('error', 'Elegí una categoría y un medio de pago.');
+  var plata = montosSegunMoneda('g', 'monedaGasto', monto);
+  if (!plata) return aviso('error', 'Poné a cuánto está el dólar para calcular los pesos.');
   var idG = nuevoId();
   guardar({
     accion: 'fila', hoja: 'GASTOS', id: idG, esquema: ESQUEMAS.GASTOS,
     datos: {
-      ID: idG, FECHA: $('gFecha').value, MONTO: monto,
+      ID: idG, FECHA: $('gFecha').value, MONTO: plata.MONTO,
+      MONEDA: plata.MONEDA, MONTO_USD: plata.MONTO_USD, COTIZACION: plata.COTIZACION,
       CATEGORIA: $('gCategoria').value, TIPO: estado.tipoGasto, MEDIO: $('gMedio').value,
       NOTA: $('gNota').value.trim(), REGISTRADO: ahora()
     }
@@ -735,11 +807,14 @@ $('btnIngreso').addEventListener('click', function () {
   if (!$('iFecha').value) return aviso('error', 'Poné la fecha del ingreso.');
   if (!(monto > 0)) return aviso('error', 'Poné el monto del ingreso.');
   if ($('iCategoria').value === NUEVA || $('iCuenta').value === NUEVA) return aviso('error', 'Elegí una categoría y una cuenta.');
+  var plataI = montosSegunMoneda('i', 'monedaIngreso', monto);
+  if (!plataI) return aviso('error', 'Poné a cuánto está el dólar para calcular los pesos.');
   var idI = nuevoId();
   guardar({
     accion: 'fila', hoja: 'INGRESOS', id: idI, esquema: ESQUEMAS.INGRESOS,
     datos: {
-      ID: idI, FECHA: $('iFecha').value, MONTO: monto,
+      ID: idI, FECHA: $('iFecha').value, MONTO: plataI.MONTO,
+      MONEDA: plataI.MONEDA, MONTO_USD: plataI.MONTO_USD, COTIZACION: plataI.COTIZACION,
       CATEGORIA: $('iCategoria').value, CUENTA: $('iCuenta').value,
       NOTA: $('iNota').value.trim(), REGISTRADO: ahora()
     }
@@ -813,13 +888,14 @@ function pintarLista(idEl, filas, tipo) {
     var b = document.createElement('b');
     var s = document.createElement('small');
     var plata = document.createElement('div');
+    var enUsd = String(f.moneda) === 'USD' && f.monto_usd ? ' · US$ ' + f.monto_usd : '';
     if (tipo === 'gasto') {
       b.textContent = f.categoria || 'Gasto';
-      s.textContent = fmtFecha(f.fecha) + (f.medio ? ' · ' + f.medio : '') + (String(f.tipo) === 'Fijo' ? ' · Fijo' : '') + (f.nota ? ' · ' + f.nota : '');
+      s.textContent = fmtFecha(f.fecha) + (f.medio ? ' · ' + f.medio : '') + (String(f.tipo) === 'Fijo' ? ' · Fijo' : '') + enUsd + (f.nota ? ' · ' + f.nota : '');
       plata.className = 'plata gasto'; plata.textContent = '− ' + fmtARS.format(f.monto || 0);
     } else if (tipo === 'ingreso') {
       b.textContent = f.categoria || 'Ingreso';
-      s.textContent = fmtFecha(f.fecha) + (f.cuenta ? ' · ' + f.cuenta : '') + (f.nota ? ' · ' + f.nota : '');
+      s.textContent = fmtFecha(f.fecha) + (f.cuenta ? ' · ' + f.cuenta : '') + enUsd + (f.nota ? ' · ' + f.nota : '');
       plata.className = 'plata ingreso'; plata.textContent = '+ ' + fmtARS.format(f.monto || 0);
     } else {
       b.textContent = (f.plataforma || '') + (f.activo ? ' · ' + f.activo : '');
@@ -876,6 +952,65 @@ function barras(el, pares, formato) {
     el.appendChild(d);
   });
 }
+// Torta de dos porciones (Fijos vs Variables)
+function tortaFijosVar(el, fijos, variables) {
+  var tot = fijos + variables;
+  if (!(tot > 0)) { el.className = 'vacio'; el.textContent = 'Sin datos este mes.'; return; }
+  var pf = Math.round(fijos / tot * 100);
+  el.className = 'torta';
+  el.innerHTML =
+    '<svg viewBox="0 0 42 42">' +
+    '<circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--amarillo)" stroke-width="8"></circle>' +
+    (fijos > 0 ? '<circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--terracota)" stroke-width="8" pathLength="100" stroke-dasharray="' + (fijos / tot * 100) + ' 100" transform="rotate(-90 21 21)"></circle>' : '') +
+    '<text x="21" y="21" text-anchor="middle" dy=".1em" font-size="9" font-weight="700" fill="var(--tinta)">' + pf + '%</text>' +
+    '<text x="21" y="27" text-anchor="middle" font-size="3.6" fill="var(--suave)">fijos</text>' +
+    '</svg>' +
+    '<div class="leyenda">' +
+    '<div class="item"><span class="cuadr" style="background:var(--terracota)"></span>Fijos (' + pf + '%)<b>' + fmtARS.format(fijos) + '</b></div>' +
+    '<div class="item"><span class="cuadr" style="background:var(--amarillo)"></span>Variables (' + (100 - pf) + '%)<b>' + fmtARS.format(variables) + '</b></div>' +
+    '</div>';
+}
+
+// Barras con detalle desplegable: tocás una categoría y ves sus movimientos
+function barrasDesplegables(el, pares, formato, filasPorClave) {
+  if (!pares.length) { el.className = 'vacio'; el.textContent = 'Sin datos este mes.'; return; }
+  el.className = ''; el.innerHTML = '';
+  var max = Math.max.apply(null, pares.map(function (p) { return Math.abs(p[1]); })) || 1;
+  pares.forEach(function (p) {
+    var d = document.createElement('div'); d.className = 'barra clickeable';
+    var info = document.createElement('div'); info.className = 'info';
+    var n = document.createElement('span'); n.textContent = '▸ ' + p[0];
+    var v = document.createElement('b'); v.textContent = formato.format(p[1]);
+    info.appendChild(n); info.appendChild(v);
+    var pista = document.createElement('div'); pista.className = 'pista';
+    var rel = document.createElement('div'); rel.className = 'relleno';
+    rel.style.width = Math.max(3, Math.abs(p[1]) / max * 100) + '%';
+    pista.appendChild(rel);
+    d.appendChild(info); d.appendChild(pista);
+    el.appendChild(d);
+    var det = document.createElement('div'); det.className = 'detalleCat';
+    (filasPorClave[p[0]] || []).slice().sort(ordenarPorFecha).forEach(function (f) {
+      var m = document.createElement('div'); m.className = 'mov';
+      var izq = document.createElement('span');
+      var extra = [];
+      if (f.medio) extra.push(f.medio);
+      if (String(f.tipo) === 'Fijo') extra.push('Fijo');
+      if (String(f.moneda) === 'USD' && f.monto_usd) extra.push('US$ ' + f.monto_usd);
+      if (f.nota) extra.push(f.nota);
+      izq.textContent = fmtFecha(f.fecha) + (extra.length ? ' · ' + extra.join(' · ') : '');
+      var der = document.createElement('b');
+      der.textContent = fmtARS.format(f.monto || 0);
+      m.appendChild(izq); m.appendChild(der);
+      det.appendChild(m);
+    });
+    el.appendChild(det);
+    d.addEventListener('click', function () {
+      var abierto = det.classList.toggle('abierto');
+      n.textContent = (abierto ? '▾ ' : '▸ ') + p[0];
+    });
+  });
+}
+
 function sumarPor(filas, campo, valor) {
   var acc = {};
   filas.forEach(function (f) {
@@ -898,7 +1033,7 @@ function pintarAnalisis() {
   var bal = totI - totG;
   var kb = $('kBalance');
   kb.textContent = fmtARS.format(bal);
-  kb.style.color = bal >= 0 ? 'var(--oliva)' : 'var(--terracota)';
+  kb.style.color = bal >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
 
   // Fijos vs variables (lo cargado sin tipo cuenta como Variable)
   var fv = { Fijos: 0, Variables: 0 };
@@ -906,17 +1041,14 @@ function pintarAnalisis() {
     var m = parseFloat(f.monto) || 0;
     if (String(f.tipo) === 'Fijo') fv.Fijos += m; else fv.Variables += m;
   });
-  if (totG > 0) {
-    var paresFV = [
-      ['Fijos (' + Math.round(fv.Fijos / totG * 100) + '%)', fv.Fijos],
-      ['Variables (' + Math.round(fv.Variables / totG * 100) + '%)', fv.Variables]
-    ].sort(function (a, b) { return b[1] - a[1]; });
-    barras($('anFijosVar'), paresFV, fmtARS);
-  } else {
-    barras($('anFijosVar'), [], fmtARS);
-  }
+  tortaFijosVar($('anFijosVar'), fv.Fijos, fv.Variables);
 
-  barras($('anGastosCat'), sumarPor(gastosMes, 'categoria', 'monto'), fmtARS);
+  var porCat = {};
+  gastosMes.forEach(function (f) {
+    var k = f.categoria || 'Sin dato';
+    (porCat[k] = porCat[k] || []).push(f);
+  });
+  barrasDesplegables($('anGastosCat'), sumarPor(gastosMes, 'categoria', 'monto'), fmtARS, porCat);
 
   // Balance por cuenta: histórico completo (ingresos − gastos por cuenta/medio)
   var cuentas = {};
