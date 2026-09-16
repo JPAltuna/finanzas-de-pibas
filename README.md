@@ -52,9 +52,16 @@ La app corre en tu celu/PC y le habla directo a tu planilla.
 
 ## Personalizar categorías y cuentas
 
-Abrí tu planilla y editá la pestaña **CONFIG**: podés agregar, cambiar o borrar
-categorías de gastos, de ingresos y cuentas (bancos, billeteras, efectivo).
-La app las toma al tocar el botón 🔄.
+Todo desde la app: en los desplegables, la opción **＋ Nueva…** agrega una
+categoría o cuenta; y en la pantalla de configuración (⚙ arriba a la derecha)
+podés **sacar con la ✕** las que no uses. También podés editar directamente la
+pestaña **CONFIG** de tu planilla (la app las toma al tocar ↻).
+
+## Gastos fijos y variables
+
+Al cargar un gasto elegís si es **Fijo** (aparece todos los meses sí o sí:
+alquiler, expensas, suscripciones, monotributo…) o **Variable** (donde vos
+decidís cuánto). El análisis mensual te muestra cuánto se va en cada uno.
 
 ## ¿Y si cargo algo sin internet?
 

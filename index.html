@@ -153,6 +153,19 @@
   }
   #pendientesAviso button { margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px 3px 10px 3px; border: none; background: var(--carbon); color: #f4f1e6; font-weight: 800; cursor: pointer; }
   .vacio { text-align: center; color: var(--suave); padding: 18px 0; font-size: .9rem; font-style: italic; }
+  .hint { font-size: .78rem; color: var(--suave); margin-top: 5px; line-height: 1.4; }
+
+  /* Chips de categorías/cuentas (configuración) */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #61705f; border: 1px solid var(--borde);
+    border-radius: 10px 3px 10px 3px; padding: 6px 10px; font-size: .88rem;
+  }
+  .chip button {
+    background: none; border: none; color: var(--terracota); font-size: 1rem;
+    font-weight: 800; cursor: pointer; padding: 0 2px; line-height: 1;
+  }
 </style>
 </head>
 <body>
@@ -186,6 +199,16 @@
       <button class="btn" id="btnGuardarSetup">Probar conexión y guardar</button>
       <button class="btn secundario" id="btnCancelarSetup" style="display:none;">Cancelar</button>
     </div>
+    <div class="card" id="cardOpciones" style="display:none;">
+      <h2>Tus categorías y cuentas</h2>
+      <p style="font-size:.85rem;color:var(--suave);line-height:1.5;">Tocá la ✕ para sacar las que no uses. Los registros viejos no se pierden: solo desaparecen del desplegable. Para agregar, usá "＋ Nueva…" en cada desplegable.</p>
+      <label>Categorías de gastos</label>
+      <div class="chips" id="chipsGastos"></div>
+      <label>Categorías de ingresos</label>
+      <div class="chips" id="chipsIngresos"></div>
+      <label>Cuentas y medios de pago</label>
+      <div class="chips" id="chipsCuentas"></div>
+    </div>
   </section>
 
   <!-- ══════════ GASTOS ══════════ -->
@@ -204,6 +227,12 @@
       </div>
       <label for="gCategoria">Categoría</label>
       <select id="gCategoria"></select>
+      <label>Tipo de gasto</label>
+      <div class="toggle" id="gTipo">
+        <button type="button" data-v="Variable" class="activo">Variable</button>
+        <button type="button" data-v="Fijo">Fijo</button>
+      </div>
+      <p class="hint"><b>Fijo</b>: aparece todos los meses sí o sí (alquiler, expensas, suscripciones, monotributo…). <b>Variable</b>: acá tenés vos el poder de decisión.</p>
       <label for="gMedio">¿Con qué pagaste?</label>
       <select id="gMedio"></select>
       <label for="gNota">Nota (opcional)</label>
@@ -290,6 +319,11 @@
       <div class="kpi"><small>Balance</small><b id="kBalance">—</b></div>
     </div>
     <div class="card">
+      <h2>Fijos vs variables</h2>
+      <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Los fijos no tienen piedad; en los variables decidís vos.</p>
+      <div id="anFijosVar" class="vacio">Sin datos este mes.</div>
+    </div>
+    <div class="card">
       <h2>Gastos por categoría</h2>
       <div id="anGastosCat" class="vacio">Sin datos este mes.</div>
     </div>
@@ -333,6 +367,7 @@ var estado = {
   datos: lsGet(LS.datos, { gastos: [], ingresos: [], inversiones: [] }),
   pendientes: lsGet(LS.pendientes, []),
   tipoInversion: 'Compra',
+  tipoGasto: 'Variable',
   sincronizando: false
 };
 
@@ -404,6 +439,7 @@ function abrirSetup(cancelable) {
   $('inUrl').value = estado.url || '';
   $('inNombre').value = lsGet(LS.nombre, '');
   $('btnCancelarSetup').style.display = cancelable ? 'block' : 'none';
+  pintarChips();
   document.querySelectorAll('.pantalla').forEach(function (s) { s.classList.remove('activa'); });
   $('p-setup').classList.add('activa');
   document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.remove('activo'); });
@@ -540,6 +576,51 @@ conAltaNueva($('gMedio'), 'cuentas', '¿Cómo se llama la nueva cuenta o medio d
 conAltaNueva($('iCategoria'), 'categoriasIngresos', '¿Cómo se llama la nueva categoría de ingreso?');
 conAltaNueva($('iCuenta'), 'cuentas', '¿Cómo se llama la nueva cuenta?');
 
+// ═══════════════ Borrar opciones (pantalla de configuración) ═══════════════
+function borrarOpcion(listaKey, valor) {
+  if (!window.confirm('¿Sacar "' + valor + '" de las opciones? Los registros que ya la usaban no se tocan.')) return;
+  if (estado.config && estado.config[listaKey]) {
+    estado.config[listaKey] = estado.config[listaKey].filter(function (v) { return String(v).toLowerCase() !== valor.toLowerCase(); });
+    lsSet(LS.config, estado.config);
+  }
+  estado.extra[listaKey] = (estado.extra[listaKey] || []).filter(function (v) { return String(v).toLowerCase() !== valor.toLowerCase(); });
+  lsSet(LS.extra, estado.extra);
+  pintarConfig();
+  pintarChips();
+  if (estado.url) {
+    fetch(estado.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ accion: 'config_borrar', lista: listaKey, valor: valor }) }).catch(function () {});
+  }
+}
+function pintarChipsDe(idEl, listaKey) {
+  var el = $(idEl);
+  el.innerHTML = '';
+  var lista = opcionesDe(listaKey);
+  if (!lista.length) {
+    var p = document.createElement('span');
+    p.className = 'hint'; p.textContent = 'Sin opciones todavía.';
+    el.appendChild(p);
+    return;
+  }
+  lista.forEach(function (v) {
+    var chip = document.createElement('span');
+    chip.className = 'chip';
+    var t = document.createElement('span'); t.textContent = v;
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = '✕'; b.title = 'Sacar esta opción';
+    b.addEventListener('click', function () { borrarOpcion(listaKey, v); });
+    chip.appendChild(t); chip.appendChild(b);
+    el.appendChild(chip);
+  });
+}
+function pintarChips() {
+  var hay = opcionesDe('categoriasGastos').length || opcionesDe('categoriasIngresos').length || opcionesDe('cuentas').length;
+  $('cardOpciones').style.display = hay ? 'block' : 'none';
+  if (!hay) return;
+  pintarChipsDe('chipsGastos', 'categoriasGastos');
+  pintarChipsDe('chipsIngresos', 'categoriasIngresos');
+  pintarChipsDe('chipsCuentas', 'cuentas');
+}
+
 // ═══════════════ Guardar registros ═══════════════
 function guardar(registro, btn, alTerminar) {
   btn.disabled = true; btn.textContent = 'Guardando…';
@@ -559,6 +640,12 @@ function guardar(registro, btn, alTerminar) {
   });
 }
 
+document.querySelectorAll('#gTipo button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    estado.tipoGasto = b.dataset.v;
+    document.querySelectorAll('#gTipo button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+  });
+});
 $('btnGasto').addEventListener('click', function () {
   var monto = parseFloat($('gMonto').value);
   if (!$('gFecha').value) return aviso('error', 'Poné la fecha del gasto.');
@@ -567,7 +654,7 @@ $('btnGasto').addEventListener('click', function () {
   guardar({
     accion: 'gasto', hoja: 'GASTOS', id: nuevoId(),
     fecha: $('gFecha').value, monto: monto,
-    categoria: $('gCategoria').value, medio: $('gMedio').value,
+    categoria: $('gCategoria').value, tipo: estado.tipoGasto, medio: $('gMedio').value,
     nota: $('gNota').value.trim()
   }, this, function () { $('gMonto').value = ''; $('gNota').value = ''; });
 });
@@ -651,7 +738,7 @@ function pintarLista(idEl, filas, tipo) {
     var plata = document.createElement('div');
     if (tipo === 'gasto') {
       b.textContent = f.categoria || 'Gasto';
-      s.textContent = fmtFecha(f.fecha) + (f.medio ? ' · ' + f.medio : '') + (f.nota ? ' · ' + f.nota : '');
+      s.textContent = fmtFecha(f.fecha) + (f.medio ? ' · ' + f.medio : '') + (String(f.tipo) === 'Fijo' ? ' · Fijo' : '') + (f.nota ? ' · ' + f.nota : '');
       plata.className = 'plata gasto'; plata.textContent = '− ' + fmtARS.format(f.monto || 0);
     } else if (tipo === 'ingreso') {
       b.textContent = f.categoria || 'Ingreso';
@@ -735,6 +822,22 @@ function pintarAnalisis() {
   var kb = $('kBalance');
   kb.textContent = fmtARS.format(bal);
   kb.style.color = bal >= 0 ? 'var(--oliva)' : 'var(--terracota)';
+
+  // Fijos vs variables (lo cargado sin tipo cuenta como Variable)
+  var fv = { Fijos: 0, Variables: 0 };
+  gastosMes.forEach(function (f) {
+    var m = parseFloat(f.monto) || 0;
+    if (String(f.tipo) === 'Fijo') fv.Fijos += m; else fv.Variables += m;
+  });
+  if (totG > 0) {
+    var paresFV = [
+      ['Fijos (' + Math.round(fv.Fijos / totG * 100) + '%)', fv.Fijos],
+      ['Variables (' + Math.round(fv.Variables / totG * 100) + '%)', fv.Variables]
+    ].sort(function (a, b) { return b[1] - a[1]; });
+    barras($('anFijosVar'), paresFV, fmtARS);
+  } else {
+    barras($('anFijosVar'), [], fmtARS);
+  }
 
   barras($('anGastosCat'), sumarPor(gastosMes, 'categoria', 'monto'), fmtARS);
 

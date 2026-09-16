@@ -22,7 +22,7 @@
  */
 
 var HOJAS = {
-  GASTOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'MEDIO', 'NOTA', 'REGISTRADO'],
+  GASTOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'TIPO', 'MEDIO', 'NOTA', 'REGISTRADO'],
   INGRESOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'CUENTA', 'NOTA', 'REGISTRADO'],
   INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO']
 };
@@ -63,10 +63,11 @@ function doPost(e) {
     lock.waitLock(20000);
     var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     var accion = body.accion || '';
-    if (accion === 'gasto') out = agregarFila('GASTOS', body, ['fecha', 'monto', 'categoria', 'medio', 'nota']);
+    if (accion === 'gasto') out = agregarFila('GASTOS', body, ['fecha', 'monto', 'categoria', 'tipo', 'medio', 'nota']);
     else if (accion === 'ingreso') out = agregarFila('INGRESOS', body, ['fecha', 'monto', 'categoria', 'cuenta', 'nota']);
     else if (accion === 'inversion') out = agregarFila('INVERSIONES', body, ['fecha', 'tipo', 'plataforma', 'activo', 'monto_usd', 'cantidad', 'nota']);
     else if (accion === 'config_nueva') out = configAgregar(body.lista, body.valor);
+    else if (accion === 'config_borrar') out = configBorrar(body.lista, body.valor);
     else out = { ok: false, error: 'Acción desconocida: ' + accion };
   } catch (err) {
     out = { ok: false, error: String(err && err.message || err) };
@@ -85,8 +86,24 @@ function hoja(nombre) {
     var cab = HOJAS[nombre];
     h.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold');
     h.setFrozenRows(1);
+  } else {
+    asegurarColumnas(h, HOJAS[nombre]);
   }
   return h;
+}
+
+// Si esta versión del conector suma una columna nueva (ej. TIPO en GASTOS),
+// la inserta en su lugar en las hojas ya creadas, sin tocar los datos.
+function asegurarColumnas(h, cab) {
+  var actual = h.getRange(1, 1, 1, Math.max(h.getLastColumn(), 1)).getValues()[0]
+    .map(function (v) { return String(v).trim(); });
+  for (var i = 0; i < cab.length; i++) {
+    if (actual[i] === cab[i]) continue;
+    if (actual.indexOf(cab[i]) >= 0) continue; // está en otra posición: no tocar
+    h.insertColumns(i + 1, 1);
+    h.getRange(1, i + 1).setValue(cab[i]).setFontWeight('bold');
+    actual.splice(i, 0, cab[i]);
+  }
 }
 
 function hojaConfig() {
@@ -194,6 +211,29 @@ function configAgregar(lista, valor) {
   }
   h.getRange(ultima + 1, col + 1).setValue(valor);
   return { ok: true, valor: valor };
+}
+
+// Saca una categoría o cuenta de la pestaña CONFIG (desde la app).
+// Los registros viejos que la usaban no se tocan: solo desaparece del desplegable.
+function configBorrar(lista, valor) {
+  var nombreCol = CONFIG_COLUMNAS[String(lista || '')];
+  valor = String(valor || '').trim();
+  if (!nombreCol) return { ok: false, error: 'Lista desconocida: ' + lista };
+  if (!valor) return { ok: false, error: 'Falta el valor' };
+  var h = hojaConfig();
+  var datos = h.getDataRange().getValues();
+  var col = -1;
+  for (var c = 0; c < datos[0].length; c++) {
+    if (String(datos[0][c]).trim() === nombreCol) { col = c; break; }
+  }
+  if (col < 0) return { ok: false, error: 'No encontré la columna ' + nombreCol + ' en CONFIG' };
+  for (var f = 1; f < datos.length; f++) {
+    if (String(datos[f][col] || '').trim().toLowerCase() === valor.toLowerCase()) {
+      h.getRange(f + 1, col + 1).deleteCells(SpreadsheetApp.Dimension.ROWS);
+      return { ok: true, valor: valor };
+    }
+  }
+  return { ok: true, valor: valor, noEstaba: true };
 }
 
 function existeId(id, nombre) {
