@@ -1,9 +1,10 @@
 /**
- * FINANZAS DE PIBAS — Conector Apps Script
- * ─────────────────────────────────────────
+ * FINANZAS DE PIBAS — Conector genérico (versión 2)
+ * ──────────────────────────────────────────────────
  * Este script conecta la app "Finanzas de pibas" con TU planilla de Google.
- * Cada usuaria pega este código en el Apps Script de SU planilla y lo
- * implementa como Web App. La app le habla por la URL que termina en /exec.
+ * Es un conector GENÉRICO: solo sabe leer hojas, agregar filas y editar
+ * listas. Toda la lógica vive en la app (que se actualiza sola desde
+ * GitHub), así este código casi nunca necesita actualizarse.
  *
  * CÓMO INSTALARLO (una sola vez):
  *  1. Creá una planilla de Google nueva (nombre sugerido: "Finanzas de pibas").
@@ -13,25 +14,15 @@
  *     - Tipo: Aplicación web
  *     - Ejecutar como: Yo
  *     - Quién tiene acceso: Cualquier usuario
- *  5. Autorizá con tu cuenta de Google (va a pedir permisos, es tu propio script).
+ *  5. Autorizá con tu cuenta de Google (es tu propio script).
  *  6. Copiá la URL que termina en /exec y pegala en la app.
  *
- * Las pestañas (GASTOS, INGRESOS, INVERSIONES, CONFIG) se crean solas
- * la primera vez que la app se conecta. Podés editar las categorías y
- * cuentas directamente en la pestaña CONFIG.
+ * SI YA TENÍAS LA VERSIÓN ANTERIOR: pegá este código encima → guardar →
+ * Implementar → Administrar implementaciones → lápiz → Versión: "Nueva
+ * versión" → Implementar. La URL /exec no cambia y tus datos quedan igual.
  */
 
-var HOJAS = {
-  GASTOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'TIPO', 'MEDIO', 'NOTA', 'REGISTRADO'],
-  INGRESOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'CUENTA', 'NOTA', 'REGISTRADO'],
-  INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO']
-};
-
-var CONFIG_SEED = {
-  'CATEGORIAS GASTOS': ['Comida', 'Súper', 'Casa', 'Transporte', 'Salud', 'Ropa', 'Salidas', 'Regalos', 'Suscripciones', 'Educación', 'Mascotas', 'Otros'],
-  'CATEGORIAS INGRESOS': ['Sueldo', 'Freelance', 'Ventas', 'Regalo', 'Reintegro', 'Otros'],
-  'CUENTAS': ['Efectivo', 'Banco', 'Mercado Pago', 'Ualá', 'Brubank', 'Dólares en mano']
-};
+var VERSION = 2;
 
 // ───────────────────────── GET (lecturas, JSONP) ─────────────────────────
 function doGet(e) {
@@ -39,10 +30,9 @@ function doGet(e) {
   var accion = p.accion || 'ping';
   var out;
   try {
-    if (accion === 'ping') out = { ok: true, app: 'finanzas-de-pibas', version: 1 };
-    else if (accion === 'config') out = { ok: true, config: leerConfig() };
-    else if (accion === 'datos') out = { ok: true, datos: leerDatos() };
-    else if (accion === 'confirmar') out = { ok: true, existe: existeId(String(p.id || ''), String(p.hoja || '')) };
+    if (accion === 'ping') out = { ok: true, app: 'finanzas-de-pibas', version: VERSION };
+    else if (accion === 'leer') out = { ok: true, hojas: leerHojas(String(p.hojas || '')) };
+    else if (accion === 'confirmar') out = { ok: true, existe: existeId(String(p.hoja || ''), String(p.id || '')) };
     else out = { ok: false, error: 'Acción desconocida: ' + accion };
   } catch (err) {
     out = { ok: false, error: String(err && err.message || err) };
@@ -61,13 +51,14 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(20000);
-    var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    var accion = body.accion || '';
-    if (accion === 'gasto') out = agregarFila('GASTOS', body, ['fecha', 'monto', 'categoria', 'tipo', 'medio', 'nota']);
-    else if (accion === 'ingreso') out = agregarFila('INGRESOS', body, ['fecha', 'monto', 'categoria', 'cuenta', 'nota']);
-    else if (accion === 'inversion') out = agregarFila('INVERSIONES', body, ['fecha', 'tipo', 'plataforma', 'activo', 'monto_usd', 'cantidad', 'nota']);
-    else if (accion === 'config_nueva') out = configAgregar(body.lista, body.valor);
-    else if (accion === 'config_borrar') out = configBorrar(body.lista, body.valor);
+    var b = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    var accion = b.accion || '';
+    if (accion === 'fila') out = filaAgregar(b.hoja, b.id, b.esquema, b.datos);
+    else if (accion === 'fila_editar') out = filaEditar(b.hoja, b.id, b.datos);
+    else if (accion === 'fila_borrar') out = filaBorrar(b.hoja, b.id);
+    else if (accion === 'celda_lista_agregar') out = listaAgregar(b.hoja, b.columna, b.valor);
+    else if (accion === 'celda_lista_borrar') out = listaBorrar(b.hoja, b.columna, b.valor);
+    else if (accion === 'hoja_seed') out = hojaSeed(b.hoja, b.matriz);
     else out = { ok: false, error: 'Acción desconocida: ' + accion };
   } catch (err) {
     out = { ok: false, error: String(err && err.message || err) };
@@ -77,173 +68,179 @@ function doPost(e) {
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// ───────────────────────── Núcleo ─────────────────────────
-function hoja(nombre) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var h = ss.getSheetByName(nombre);
-  if (!h) {
-    h = ss.insertSheet(nombre);
-    var cab = HOJAS[nombre];
-    h.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold');
-    h.setFrozenRows(1);
-  } else {
-    asegurarColumnas(h, HOJAS[nombre]);
-  }
-  return h;
-}
+// ───────────────────────── Ayudantes ─────────────────────────
+function ss() { return SpreadsheetApp.getActiveSpreadsheet(); }
 
-// Si esta versión del conector suma una columna nueva (ej. TIPO en GASTOS),
-// la inserta en su lugar en las hojas ya creadas, sin tocar los datos.
-function asegurarColumnas(h, cab) {
-  var actual = h.getRange(1, 1, 1, Math.max(h.getLastColumn(), 1)).getValues()[0]
+function cabeceraDe(h) {
+  if (h.getLastRow() < 1 || h.getLastColumn() < 1) return [];
+  return h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0]
     .map(function (v) { return String(v).trim(); });
-  for (var i = 0; i < cab.length; i++) {
-    if (actual[i] === cab[i]) continue;
-    if (actual.indexOf(cab[i]) >= 0) continue; // está en otra posición: no tocar
-    h.insertColumns(i + 1, 1);
-    h.getRange(1, i + 1).setValue(cab[i]).setFontWeight('bold');
-    actual.splice(i, 0, cab[i]);
-  }
 }
 
-function hojaConfig() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var h = ss.getSheetByName('CONFIG');
+// Crea la hoja si falta (con el esquema como cabecera) y agrega al final
+// las columnas del esquema que no existan. Nunca borra ni mueve nada.
+function asegurarHoja(nombre, esquema) {
+  nombre = String(nombre || '').trim();
+  if (!nombre) throw new Error('Falta el nombre de la hoja');
+  var h = ss().getSheetByName(nombre);
   if (!h) {
-    h = ss.insertSheet('CONFIG');
-    var cols = Object.keys(CONFIG_SEED);
-    h.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold');
-    for (var c = 0; c < cols.length; c++) {
-      var vals = CONFIG_SEED[cols[c]].map(function (v) { return [v]; });
-      h.getRange(2, c + 1, vals.length, 1).setValues(vals);
+    h = ss().insertSheet(nombre);
+    if (esquema && esquema.length) {
+      h.getRange(1, 1, 1, esquema.length).setValues([esquema]).setFontWeight('bold');
+      h.setFrozenRows(1);
     }
-    h.setFrozenRows(1);
+    return h;
   }
-  return h;
-}
-
-function leerConfig() {
-  var h = hojaConfig();
-  var datos = h.getDataRange().getValues();
-  var cab = datos[0];
-  var out = {};
-  for (var c = 0; c < cab.length; c++) {
-    var lista = [];
-    for (var f = 1; f < datos.length; f++) {
-      var v = String(datos[f][c] || '').trim();
-      if (v) lista.push(v);
-    }
-    out[String(cab[c])] = lista;
-  }
-  return {
-    categoriasGastos: out['CATEGORIAS GASTOS'] || [],
-    categoriasIngresos: out['CATEGORIAS INGRESOS'] || [],
-    cuentas: out['CUENTAS'] || []
-  };
-}
-
-function leerDatos() {
-  hojaConfig(); // asegura que CONFIG exista desde la primera conexión
-  var out = {};
-  Object.keys(HOJAS).forEach(function (nombre) {
-    var h = hoja(nombre);
-    var cab = HOJAS[nombre];
-    var n = h.getLastRow();
-    var filas = [];
-    if (n > 1) {
-      var vals = h.getRange(2, 1, n - 1, cab.length).getValues();
-      for (var i = 0; i < vals.length; i++) {
-        if (!String(vals[i][0])) continue; // sin ID = fila vacía
-        var obj = {};
-        for (var c = 0; c < cab.length; c++) {
-          var v = vals[i][c];
-          if (v instanceof Date) v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-          obj[cab[c].toLowerCase()] = v;
-        }
-        filas.push(obj);
+  if (esquema && esquema.length) {
+    var cab = cabeceraDe(h);
+    for (var i = 0; i < esquema.length; i++) {
+      if (cab.indexOf(esquema[i]) < 0) {
+        cab.push(esquema[i]);
+        h.getRange(1, cab.length).setValue(esquema[i]).setFontWeight('bold');
       }
     }
-    out[nombre.toLowerCase()] = filas;
+  }
+  return h;
+}
+
+function colPorNombre(h, nombre) {
+  return cabeceraDe(h).indexOf(String(nombre).trim());
+}
+
+function formatearValor(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return v;
+}
+
+// ───────────────────────── Lecturas ─────────────────────────
+function leerHojas(listaHojas) {
+  var out = {};
+  listaHojas.split(',').forEach(function (nombre) {
+    nombre = nombre.trim();
+    if (!nombre) return;
+    var h = ss().getSheetByName(nombre);
+    if (!h) { out[nombre] = { cabeceras: [], filas: [] }; return; }
+    var cab = cabeceraDe(h);
+    var n = h.getLastRow();
+    var filas = [];
+    if (cab.length && n > 1) {
+      var vals = h.getRange(2, 1, n - 1, cab.length).getValues();
+      for (var i = 0; i < vals.length; i++) {
+        filas.push(vals[i].map(formatearValor));
+      }
+    }
+    out[nombre] = { cabeceras: cab, filas: filas };
   });
   return out;
 }
 
-function agregarFila(nombre, body, campos) {
-  var h = hoja(nombre);
-  var id = String(body.id || '').trim();
-  if (!id) return { ok: false, error: 'Falta el id del registro' };
-  if (existeId(id, nombre)) return { ok: true, id: id, repetido: true }; // ya estaba (reintento), no duplicar
-
-  var fila = [id];
-  for (var i = 0; i < campos.length; i++) {
-    var v = body[campos[i]];
-    fila.push(v === undefined || v === null ? '' : v);
+function filaDeId(h, id) {
+  var col = colPorNombre(h, 'ID');
+  if (col < 0 || !id) return -1;
+  var n = h.getLastRow();
+  if (n < 2) return -1;
+  var ids = h.getRange(2, col + 1, n - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) return i + 2;
   }
-  fila.push(new Date());
+  return -1;
+}
+
+function existeId(nombreHoja, id) {
+  var h = ss().getSheetByName(nombreHoja);
+  if (!h) return false;
+  return filaDeId(h, id) > 0;
+}
+
+// ───────────────────────── Escrituras ─────────────────────────
+function filaAgregar(nombreHoja, id, esquema, datos) {
+  id = String(id || '').trim();
+  if (!id) return { ok: false, error: 'Falta el id del registro' };
+  var h = asegurarHoja(nombreHoja, esquema || []);
+  if (filaDeId(h, id) > 0) return { ok: true, id: id, repetido: true }; // reintento: no duplicar
+  var cab = cabeceraDe(h);
+  var fila = cab.map(function (c) {
+    var v = (datos || {})[c];
+    return v === undefined || v === null ? '' : v;
+  });
   h.getRange(h.getLastRow() + 1, 1, 1, fila.length).setValues([fila]);
   return { ok: true, id: id };
 }
 
-// Agrega una categoría o cuenta nueva a la pestaña CONFIG (desde la app).
-// Para sacar opciones que no usás, borrá la celda directamente en CONFIG.
-var CONFIG_COLUMNAS = {
-  categoriasGastos: 'CATEGORIAS GASTOS',
-  categoriasIngresos: 'CATEGORIAS INGRESOS',
-  cuentas: 'CUENTAS'
-};
-function configAgregar(lista, valor) {
-  var nombreCol = CONFIG_COLUMNAS[String(lista || '')];
+function filaEditar(nombreHoja, id, datos) {
+  var h = ss().getSheetByName(String(nombreHoja || '').trim());
+  if (!h) return { ok: false, error: 'No existe la hoja ' + nombreHoja };
+  var f = filaDeId(h, id);
+  if (f < 0) return { ok: false, error: 'No encontré el registro ' + id };
+  var cab = cabeceraDe(h);
+  Object.keys(datos || {}).forEach(function (c) {
+    var col = cab.indexOf(String(c).trim());
+    if (col >= 0) h.getRange(f, col + 1).setValue(datos[c]);
+  });
+  return { ok: true, id: id };
+}
+
+function filaBorrar(nombreHoja, id) {
+  var h = ss().getSheetByName(String(nombreHoja || '').trim());
+  if (!h) return { ok: false, error: 'No existe la hoja ' + nombreHoja };
+  var f = filaDeId(h, id);
+  if (f < 0) return { ok: true, id: id, noEstaba: true };
+  h.deleteRow(f);
+  return { ok: true, id: id };
+}
+
+// Listas verticales (ej. las columnas de la hoja CONFIG)
+function listaAgregar(nombreHoja, columna, valor) {
   valor = String(valor || '').trim();
-  if (!nombreCol) return { ok: false, error: 'Lista desconocida: ' + lista };
   if (!valor) return { ok: false, error: 'Falta el valor' };
-  var h = hojaConfig();
-  var datos = h.getDataRange().getValues();
-  var col = -1;
-  for (var c = 0; c < datos[0].length; c++) {
-    if (String(datos[0][c]).trim() === nombreCol) { col = c; break; }
-  }
-  if (col < 0) return { ok: false, error: 'No encontré la columna ' + nombreCol + ' en CONFIG' };
+  var h = ss().getSheetByName(String(nombreHoja || '').trim());
+  if (!h) return { ok: false, error: 'No existe la hoja ' + nombreHoja };
+  var col = colPorNombre(h, columna);
+  if (col < 0) return { ok: false, error: 'No encontré la columna ' + columna };
+  var n = h.getLastRow();
   var ultima = 1;
-  for (var f = 1; f < datos.length; f++) {
-    var v = String(datos[f][col] || '').trim();
-    if (v.toLowerCase() === valor.toLowerCase()) return { ok: true, valor: v, repetido: true };
-    if (v) ultima = f + 1;
+  if (n > 1) {
+    var vals = h.getRange(2, col + 1, n - 1, 1).getValues();
+    for (var i = 0; i < vals.length; i++) {
+      var v = String(vals[i][0] || '').trim();
+      if (v.toLowerCase() === valor.toLowerCase()) return { ok: true, valor: v, repetido: true };
+      if (v) ultima = i + 2;
+    }
   }
   h.getRange(ultima + 1, col + 1).setValue(valor);
   return { ok: true, valor: valor };
 }
 
-// Saca una categoría o cuenta de la pestaña CONFIG (desde la app).
-// Los registros viejos que la usaban no se tocan: solo desaparece del desplegable.
-function configBorrar(lista, valor) {
-  var nombreCol = CONFIG_COLUMNAS[String(lista || '')];
+function listaBorrar(nombreHoja, columna, valor) {
   valor = String(valor || '').trim();
-  if (!nombreCol) return { ok: false, error: 'Lista desconocida: ' + lista };
   if (!valor) return { ok: false, error: 'Falta el valor' };
-  var h = hojaConfig();
-  var datos = h.getDataRange().getValues();
-  var col = -1;
-  for (var c = 0; c < datos[0].length; c++) {
-    if (String(datos[0][c]).trim() === nombreCol) { col = c; break; }
-  }
-  if (col < 0) return { ok: false, error: 'No encontré la columna ' + nombreCol + ' en CONFIG' };
-  for (var f = 1; f < datos.length; f++) {
-    if (String(datos[f][col] || '').trim().toLowerCase() === valor.toLowerCase()) {
-      h.getRange(f + 1, col + 1).deleteCells(SpreadsheetApp.Dimension.ROWS);
-      return { ok: true, valor: valor };
+  var h = ss().getSheetByName(String(nombreHoja || '').trim());
+  if (!h) return { ok: false, error: 'No existe la hoja ' + nombreHoja };
+  var col = colPorNombre(h, columna);
+  if (col < 0) return { ok: false, error: 'No encontré la columna ' + columna };
+  var n = h.getLastRow();
+  if (n > 1) {
+    var vals = h.getRange(2, col + 1, n - 1, 1).getValues();
+    for (var i = 0; i < vals.length; i++) {
+      if (String(vals[i][0] || '').trim().toLowerCase() === valor.toLowerCase()) {
+        h.getRange(i + 2, col + 1).deleteCells(SpreadsheetApp.Dimension.ROWS);
+        return { ok: true, valor: valor };
+      }
     }
   }
   return { ok: true, valor: valor, noEstaba: true };
 }
 
-function existeId(id, nombre) {
-  if (!id || !HOJAS[nombre]) return false;
-  var h = hoja(nombre);
-  var n = h.getLastRow();
-  if (n < 2) return false;
-  var ids = h.getRange(2, 1, n - 1, 1).getValues();
-  for (var i = 0; i < ids.length; i++) {
-    if (String(ids[i][0]) === id) return true;
-  }
-  return false;
+// Crea una hoja con contenido inicial (solo si no existe o está vacía)
+function hojaSeed(nombreHoja, matriz) {
+  nombreHoja = String(nombreHoja || '').trim();
+  if (!nombreHoja || !matriz || !matriz.length) return { ok: false, error: 'Faltan datos' };
+  var h = ss().getSheetByName(nombreHoja);
+  if (h && h.getLastRow() > 0) return { ok: true, yaExiste: true };
+  if (!h) h = ss().insertSheet(nombreHoja);
+  var ancho = matriz[0].length;
+  h.getRange(1, 1, matriz.length, ancho).setValues(matriz);
+  h.getRange(1, 1, 1, ancho).setFontWeight('bold');
+  h.setFrozenRows(1);
+  return { ok: true };
 }

@@ -384,6 +384,64 @@ function hoyISO() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function nuevoId() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+function ahora() {
+  var d = new Date();
+  return hoyISO() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+// ═══════════════ Esquemas: la app define las hojas y columnas ═══════════════
+// (el conector es genérico y solo obedece; las mejoras futuras se hacen acá)
+var ESQUEMAS = {
+  GASTOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'TIPO', 'MEDIO', 'NOTA', 'REGISTRADO'],
+  INGRESOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'CUENTA', 'NOTA', 'REGISTRADO'],
+  INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO']
+};
+var CONFIG_COLS = {
+  categoriasGastos: 'CATEGORIAS GASTOS',
+  categoriasIngresos: 'CATEGORIAS INGRESOS',
+  cuentas: 'CUENTAS'
+};
+var CONFIG_DEFAULT = {
+  categoriasGastos: ['Comida', 'Súper', 'Casa', 'Transporte', 'Salud', 'Ropa', 'Salidas', 'Regalos', 'Suscripciones', 'Educación', 'Mascotas', 'Otros'],
+  categoriasIngresos: ['Sueldo', 'Freelance', 'Ventas', 'Regalo', 'Reintegro', 'Otros'],
+  cuentas: ['Efectivo', 'Banco', 'Mercado Pago', 'Ualá', 'Brubank', 'Dólares en mano']
+};
+// Una hoja cruda {cabeceras, filas} → lista de objetos {columna: valor}
+function filasAObjetos(cruda) {
+  if (!cruda || !cruda.cabeceras || !cruda.cabeceras.length) return [];
+  var idIdx = cruda.cabeceras.indexOf('ID');
+  var out = [];
+  (cruda.filas || []).forEach(function (fila) {
+    if (idIdx >= 0 && !String(fila[idIdx] || '')) return; // sin ID = fila vacía
+    var o = {};
+    cruda.cabeceras.forEach(function (c, i) { o[String(c).toLowerCase()] = fila[i]; });
+    out.push(o);
+  });
+  return out;
+}
+// La hoja CONFIG cruda → {categoriasGastos, categoriasIngresos, cuentas}
+function configDeCruda(cruda) {
+  if (!cruda || !cruda.cabeceras || !cruda.cabeceras.length) return null;
+  var porCol = {};
+  cruda.cabeceras.forEach(function (c, i) {
+    porCol[c] = (cruda.filas || []).map(function (f) { return String(f[i] || '').trim(); }).filter(Boolean);
+  });
+  var out = {};
+  Object.keys(CONFIG_COLS).forEach(function (k) { out[k] = porCol[CONFIG_COLS[k]] || []; });
+  return out;
+}
+// Primera vez: crea la pestaña CONFIG en la planilla con las opciones iniciales
+function seedConfig() {
+  if (!estado.url) return;
+  var claves = Object.keys(CONFIG_COLS);
+  var listas = claves.map(function (k) { return CONFIG_DEFAULT[k]; });
+  var alto = Math.max.apply(null, listas.map(function (l) { return l.length; }));
+  var matriz = [claves.map(function (k) { return CONFIG_COLS[k]; })];
+  for (var f = 0; f < alto; f++) {
+    matriz.push(listas.map(function (l) { return l[f] || ''; }));
+  }
+  fetch(estado.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ accion: 'hoja_seed', hoja: 'CONFIG', matriz: matriz }) }).catch(function () {});
+}
 
 // ═══════════════ Comunicación con el conector ═══════════════
 // Lecturas: JSONP (evita problemas de CORS con Apps Script).
@@ -458,6 +516,7 @@ $('btnGuardarSetup').addEventListener('click', function () {
   estado.url = url;
   jsonp({ accion: 'ping' }, 20000).then(function (resp) {
     if (!resp || !resp.ok || resp.app !== 'finanzas-de-pibas') throw new Error('Respondió algo raro (¿pegaste bien el código del conector?)');
+    if (!(resp.version >= 2)) throw new Error('tu conector es de una versión vieja. Pegá el código actualizado en Apps Script y hacé "Nueva versión" (pasos en el README).');
     lsSet(LS.url, url);
     lsSet(LS.nombre, $('inNombre').value.trim());
     aviso('ok', 'Lista. Tu planilla quedó conectada.');
@@ -476,20 +535,29 @@ function sincronizar(conAviso) {
   if (!estado.url || estado.sincronizando) return Promise.resolve();
   estado.sincronizando = true;
   $('btnSync').textContent = '…';
-  return Promise.all([
-    jsonp({ accion: 'config' }),
-    jsonp({ accion: 'datos' })
-  ]).then(function (r) {
-    if (r[0] && r[0].ok) {
-      estado.config = r[0].config;
-      lsSet(LS.config, estado.config);
-      limpiarExtras();
+  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,CONFIG' }).then(function (r) {
+    if (!r || !r.ok) {
+      var msj = (r && r.error) ? r.error : 'la planilla respondió algo raro';
+      if (/desconocida/i.test(msj)) msj = 'tu conector es de una versión vieja. Pegá el código nuevo en Apps Script y hacé "Nueva versión" (pasos en el README).';
+      throw new Error(msj);
     }
-    if (r[1] && r[1].ok) { estado.datos = r[1].datos; lsSet(LS.datos, estado.datos); }
+    var h = r.hojas || {};
+    estado.datos = {
+      gastos: filasAObjetos(h.GASTOS),
+      ingresos: filasAObjetos(h.INGRESOS),
+      inversiones: filasAObjetos(h.INVERSIONES)
+    };
+    lsSet(LS.datos, estado.datos);
+    var cfg = configDeCruda(h.CONFIG);
+    if (!cfg) { seedConfig(); cfg = JSON.parse(JSON.stringify(CONFIG_DEFAULT)); }
+    estado.config = cfg;
+    lsSet(LS.config, cfg);
+    limpiarExtras();
     pintarTodo();
     if (conAviso) aviso('ok', 'Datos actualizados desde tu planilla.');
   }).catch(function (err) {
-    if (conAviso) aviso('error', 'No se pudo actualizar: ' + err.message);
+    var esViejo = /versión vieja/.test(err.message);
+    if (conAviso || esViejo) aviso('error', 'No se pudo actualizar: ' + err.message, esViejo);
   }).finally(function () {
     estado.sincronizando = false;
     $('btnSync').textContent = '↻';
@@ -544,7 +612,7 @@ function conAltaNueva(el, listaKey, pregunta) {
       pintarConfig();
       // Se manda a la pestaña CONFIG de la planilla (si falla, queda local y listo)
       if (estado.url) {
-        fetch(estado.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ accion: 'config_nueva', lista: listaKey, valor: v }) }).catch(function () {});
+        fetch(estado.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ accion: 'celda_lista_agregar', hoja: 'CONFIG', columna: CONFIG_COLS[listaKey], valor: v }) }).catch(function () {});
       }
     }
     el.value = ya || v;
@@ -588,7 +656,7 @@ function borrarOpcion(listaKey, valor) {
   pintarConfig();
   pintarChips();
   if (estado.url) {
-    fetch(estado.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ accion: 'config_borrar', lista: listaKey, valor: valor }) }).catch(function () {});
+    fetch(estado.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ accion: 'celda_lista_borrar', hoja: 'CONFIG', columna: CONFIG_COLS[listaKey], valor: valor }) }).catch(function () {});
   }
 }
 function pintarChipsDe(idEl, listaKey) {
@@ -651,11 +719,14 @@ $('btnGasto').addEventListener('click', function () {
   if (!$('gFecha').value) return aviso('error', 'Poné la fecha del gasto.');
   if (!(monto > 0)) return aviso('error', 'Poné el monto del gasto.');
   if ($('gCategoria').value === NUEVA || $('gMedio').value === NUEVA) return aviso('error', 'Elegí una categoría y un medio de pago.');
+  var idG = nuevoId();
   guardar({
-    accion: 'gasto', hoja: 'GASTOS', id: nuevoId(),
-    fecha: $('gFecha').value, monto: monto,
-    categoria: $('gCategoria').value, tipo: estado.tipoGasto, medio: $('gMedio').value,
-    nota: $('gNota').value.trim()
+    accion: 'fila', hoja: 'GASTOS', id: idG, esquema: ESQUEMAS.GASTOS,
+    datos: {
+      ID: idG, FECHA: $('gFecha').value, MONTO: monto,
+      CATEGORIA: $('gCategoria').value, TIPO: estado.tipoGasto, MEDIO: $('gMedio').value,
+      NOTA: $('gNota').value.trim(), REGISTRADO: ahora()
+    }
   }, this, function () { $('gMonto').value = ''; $('gNota').value = ''; });
 });
 
@@ -664,11 +735,14 @@ $('btnIngreso').addEventListener('click', function () {
   if (!$('iFecha').value) return aviso('error', 'Poné la fecha del ingreso.');
   if (!(monto > 0)) return aviso('error', 'Poné el monto del ingreso.');
   if ($('iCategoria').value === NUEVA || $('iCuenta').value === NUEVA) return aviso('error', 'Elegí una categoría y una cuenta.');
+  var idI = nuevoId();
   guardar({
-    accion: 'ingreso', hoja: 'INGRESOS', id: nuevoId(),
-    fecha: $('iFecha').value, monto: monto,
-    categoria: $('iCategoria').value, cuenta: $('iCuenta').value,
-    nota: $('iNota').value.trim()
+    accion: 'fila', hoja: 'INGRESOS', id: idI, esquema: ESQUEMAS.INGRESOS,
+    datos: {
+      ID: idI, FECHA: $('iFecha').value, MONTO: monto,
+      CATEGORIA: $('iCategoria').value, CUENTA: $('iCuenta').value,
+      NOTA: $('iNota').value.trim(), REGISTRADO: ahora()
+    }
   }, this, function () { $('iMonto').value = ''; $('iNota').value = ''; });
 });
 
@@ -683,12 +757,15 @@ $('btnInversion').addEventListener('click', function () {
   if (!$('vFecha').value) return aviso('error', 'Poné la fecha del movimiento.');
   if (!(monto > 0)) return aviso('error', 'Poné el monto en dólares.');
   if (!$('vPlataforma').value.trim()) return aviso('error', 'Poné la plataforma (Binance, Lemon, IOL…).');
+  var idV = nuevoId();
   guardar({
-    accion: 'inversion', hoja: 'INVERSIONES', id: nuevoId(),
-    fecha: $('vFecha').value, tipo: estado.tipoInversion,
-    plataforma: $('vPlataforma').value.trim(), activo: $('vActivo').value.trim(),
-    monto_usd: monto, cantidad: parseFloat($('vCantidad').value) || '',
-    nota: $('vNota').value.trim()
+    accion: 'fila', hoja: 'INVERSIONES', id: idV, esquema: ESQUEMAS.INVERSIONES,
+    datos: {
+      ID: idV, FECHA: $('vFecha').value, TIPO: estado.tipoInversion,
+      PLATAFORMA: $('vPlataforma').value.trim(), ACTIVO: $('vActivo').value.trim(),
+      MONTO_USD: monto, CANTIDAD: parseFloat($('vCantidad').value) || '',
+      NOTA: $('vNota').value.trim(), REGISTRADO: ahora()
+    }
   }, this, function () { $('vMonto').value = ''; $('vCantidad').value = ''; $('vNota').value = ''; });
 });
 
