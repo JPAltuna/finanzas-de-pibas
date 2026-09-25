@@ -153,6 +153,8 @@
     font-size: .88rem; font-weight: 600;
   }
   #pendientesAviso button { margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px 3px 10px 3px; border: none; background: var(--carbon); color: #f4f1e6; font-weight: 800; cursor: pointer; }
+  #pendientesAviso .pendItem { font-weight: 500; font-size: .84rem; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(244, 240, 224, .25); }
+  .tagPend { color: var(--amarillo); font-weight: 700; }
   .vacio { text-align: center; color: var(--suave); padding: 18px 0; font-size: .9rem; font-style: italic; }
   .hint { font-size: .78rem; color: var(--suave); margin-top: 5px; line-height: 1.4; }
 
@@ -456,6 +458,28 @@ function filasAObjetos(cruda) {
   });
   return out;
 }
+// Un registro escrito acá (datos con claves MAYÚSCULAS) → objeto como los de la planilla
+function objDeDatos(datos) {
+  var o = {};
+  Object.keys(datos || {}).forEach(function (k) { o[k.toLowerCase()] = datos[k]; });
+  return o;
+}
+function claveDeHoja(hoja) {
+  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : '';
+}
+// Registros de la planilla + los que todavía están por subir (marcados _pendiente)
+function conPendientes(hoja) {
+  var base = (estado.datos[claveDeHoja(hoja)] || []).slice();
+  var ids = {};
+  base.forEach(function (f) { ids[String(f.id)] = true; });
+  estado.pendientes.forEach(function (r) {
+    if (r.hoja !== hoja || ids[String(r.id)]) return;
+    var o = objDeDatos(r.datos);
+    o._pendiente = true;
+    base.push(o);
+  });
+  return base;
+}
 // La hoja CONFIG cruda → {categoriasGastos, categoriasIngresos, cuentas}
 function configDeCruda(cruda) {
   if (!cruda || !cruda.cabeceras || !cruda.cabeceras.length) return null;
@@ -727,22 +751,16 @@ function pintarChips() {
 }
 
 // ═══════════════ Guardar registros ═══════════════
+// El registro se anota al toque (aparece ya mismo en la lista y el formulario
+// se limpia) y la subida a la planilla sigue sola por atrás con la cola de
+// pendientes. Si falla, queda en la cola y se reintenta solo.
 function guardar(registro, btn, alTerminar) {
-  btn.disabled = true; btn.textContent = 'Guardando…';
-  enviarRegistro(registro).then(function () {
-    aviso('ok', 'Guardado en tu planilla.');
-    alTerminar();
-    sincronizar(false);
-  }).catch(function () {
-    estado.pendientes.push(registro);
-    lsSet(LS.pendientes, estado.pendientes);
-    pintarPendientes();
-    aviso('info', 'Sin conexión: quedó guardado en el celu y se manda cuando vuelva internet.');
-    alTerminar();
-  }).finally(function () {
-    btn.disabled = false;
-    btn.textContent = registro.hoja === 'GASTOS' ? 'Guardar gasto' : registro.hoja === 'INGRESOS' ? 'Guardar ingreso' : 'Guardar inversión';
-  });
+  estado.pendientes.push(registro);
+  lsSet(LS.pendientes, estado.pendientes);
+  alTerminar();
+  pintarTodo();
+  aviso('ok', 'Anotado. Se está subiendo a tu planilla…');
+  procesarCola();
 }
 
 document.querySelectorAll('#gTipo button').forEach(function (b) {
@@ -844,36 +862,66 @@ $('btnInversion').addEventListener('click', function () {
   }, this, function () { $('vMonto').value = ''; $('vCantidad').value = ''; $('vNota').value = ''; });
 });
 
-// ═══════════════ Pendientes (registros sin mandar) ═══════════════
+// ═══════════════ Cola de pendientes (registros por subir) ═══════════════
+function descPendiente(r) {
+  var d = r.datos || {};
+  var que = r.hoja === 'GASTOS' ? 'Gasto' : r.hoja === 'INGRESOS' ? 'Ingreso' : 'Inversión';
+  var detalle = d.CATEGORIA || d.PLATAFORMA || '';
+  var monto = r.hoja === 'INVERSIONES' ? fmtUSD.format(parseFloat(d.MONTO_USD) || 0) : fmtARS.format(parseFloat(d.MONTO) || 0);
+  return que + ' · ' + fmtFecha(d.FECHA) + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
+}
 function pintarPendientes() {
   var el = $('pendientesAviso');
   if (!estado.pendientes.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = 'block';
-  el.innerHTML = 'Tenés <b>' + estado.pendientes.length + '</b> registro(s) esperando para subir a la planilla. ' +
-    '<button id="btnReintentar">Reintentar ahora</button>';
-  $('btnReintentar').addEventListener('click', reintentarPendientes);
-}
-function reintentarPendientes() {
-  if (!estado.pendientes.length || !estado.url) return;
-  var cola = estado.pendientes.slice();
-  aviso('info', 'Mandando registros pendientes…', true);
-  var proceso = Promise.resolve();
-  cola.forEach(function (reg) {
-    proceso = proceso.then(function () {
-      return enviarRegistro(reg).then(function () {
-        estado.pendientes = estado.pendientes.filter(function (r) { return r.id !== reg.id; });
-        lsSet(LS.pendientes, estado.pendientes);
-        pintarPendientes();
-      });
-    });
+  el.innerHTML = '';
+  var tit = document.createElement('div');
+  tit.textContent = enviandoCola ? 'Subiendo a tu planilla…' : 'Por subir a tu planilla (la app reintenta sola):';
+  el.appendChild(tit);
+  estado.pendientes.forEach(function (r) {
+    var item = document.createElement('div');
+    item.className = 'pendItem';
+    item.textContent = descPendiente(r);
+    el.appendChild(item);
   });
-  proceso.then(function () {
-    aviso('ok', 'Todo subido a la planilla.');
-    sincronizar(false);
+  if (!enviandoCola) {
+    var b = document.createElement('button');
+    b.textContent = 'Reintentar ahora';
+    b.addEventListener('click', procesarCola);
+    el.appendChild(b);
+  }
+}
+// Manda los pendientes de a uno, en orden. Si uno falla, para y reintenta
+// solo en un rato (o cuando vuelva internet, o al tocar "Reintentar ahora").
+var enviandoCola = false;
+var reintentoTimer = null;
+function procesarCola() {
+  if (enviandoCola || !estado.pendientes.length || !estado.url) return;
+  clearTimeout(reintentoTimer);
+  enviandoCola = true;
+  pintarPendientes();
+  var reg = estado.pendientes[0];
+  enviarRegistro(reg).then(function () {
+    estado.pendientes = estado.pendientes.filter(function (r) { return r.id !== reg.id; });
+    lsSet(LS.pendientes, estado.pendientes);
+    // Pasa de "pendiente" a dato confirmado sin esperar la próxima sincronización.
+    var k = claveDeHoja(reg.hoja);
+    if (k && !(estado.datos[k] || []).some(function (f) { return String(f.id) === String(reg.id); })) {
+      (estado.datos[k] = estado.datos[k] || []).push(objDeDatos(reg.datos));
+      lsSet(LS.datos, estado.datos);
+    }
+    enviandoCola = false;
+    pintarTodo();
+    if (estado.pendientes.length) procesarCola();
+    else aviso('ok', 'Guardado en tu planilla.');
   }).catch(function () {
-    aviso('error', 'Algunos registros no se pudieron subir todavía. Probá de nuevo más tarde.');
+    enviandoCola = false;
+    pintarTodo();
+    aviso('info', 'No se pudo subir ahora: quedó en la lista de acá arriba y se reintenta solo.');
+    reintentoTimer = setTimeout(procesarCola, 60000);
   });
 }
+window.addEventListener('online', procesarCola);
 
 // ═══════════════ Listas de últimos movimientos ═══════════════
 function ordenarPorFecha(a, b) { return String(b.fecha).localeCompare(String(a.fecha)); }
@@ -902,6 +950,12 @@ function pintarLista(idEl, filas, tipo) {
       s.textContent = fmtFecha(f.fecha) + ' · ' + (f.tipo || 'Compra') + (f.cantidad ? ' · ' + f.cantidad + ' u.' : '');
       plata.className = 'plata usd';
       plata.textContent = (String(f.tipo).toLowerCase() === 'venta' ? '− ' : '+ ') + fmtUSD.format(f.monto_usd || 0);
+    }
+    if (f._pendiente) {
+      var tag = document.createElement('span');
+      tag.className = 'tagPend';
+      tag.textContent = ' · subiendo ↑';
+      s.appendChild(tag);
     }
     det.appendChild(b); det.appendChild(s);
     div.appendChild(det); div.appendChild(plata);
@@ -1022,9 +1076,9 @@ function sumarPor(filas, campo, valor) {
 function pintarAnalisis() {
   pintarSelectorMeses();
   var mes = $('mesSelector').value;
-  var gastosMes = (estado.datos.gastos || []).filter(function (f) { return mesDe(f) === mes; });
-  var ingresosMes = (estado.datos.ingresos || []).filter(function (f) { return mesDe(f) === mes; });
-  var invMes = (estado.datos.inversiones || []).filter(function (f) { return mesDe(f) === mes; });
+  var gastosMes = conPendientes('GASTOS').filter(function (f) { return mesDe(f) === mes; });
+  var ingresosMes = conPendientes('INGRESOS').filter(function (f) { return mesDe(f) === mes; });
+  var invMes = conPendientes('INVERSIONES').filter(function (f) { return mesDe(f) === mes; });
 
   var totG = gastosMes.reduce(function (s, f) { return s + (parseFloat(f.monto) || 0); }, 0);
   var totI = ingresosMes.reduce(function (s, f) { return s + (parseFloat(f.monto) || 0); }, 0);
@@ -1095,9 +1149,9 @@ $('mesSelector').addEventListener('change', pintarAnalisis);
 // ═══════════════ Pintar todo ═══════════════
 function pintarTodo() {
   pintarConfig();
-  pintarLista('listaGastos', estado.datos.gastos || [], 'gasto');
-  pintarLista('listaIngresos', estado.datos.ingresos || [], 'ingreso');
-  pintarLista('listaInversiones', estado.datos.inversiones || [], 'inversion');
+  pintarLista('listaGastos', conPendientes('GASTOS'), 'gasto');
+  pintarLista('listaIngresos', conPendientes('INGRESOS'), 'ingreso');
+  pintarLista('listaInversiones', conPendientes('INVERSIONES'), 'inversion');
   pintarPendientes();
   if ($('p-analisis').classList.contains('activa')) pintarAnalisis();
 }
@@ -1111,9 +1165,7 @@ if (!estado.url) {
   abrirSetup(false);
 } else {
   mostrar('gastos');
-  sincronizar(false).then(function () {
-    if (estado.pendientes.length) reintentarPendientes();
-  });
+  sincronizar(false).then(function () { procesarCola(); });
 }
 
 // Service worker (para instalar la app y que abra sin internet)
