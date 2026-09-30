@@ -63,6 +63,19 @@ Al cargar un gasto elegís si es **Fijo** (aparece todos los meses sí o sí:
 alquiler, expensas, suscripciones, monotributo…) o **Variable** (donde vos
 decidís cuánto). El análisis mensual te muestra cuánto se va en cada uno.
 
+## Deudas
+
+En la pestaña **Deudas** anotás tanto lo que debés como lo que te deben,
+con quién y de cuánto. Tocás una deuda para registrarle pagos: el saldo
+baja solo y, cuando llega a cero, pasa a "Saldadas". Ojo: los pagos de
+deuda no se anotan solos como gastos del mes (para no contar doble);
+si querés que cuenten en el análisis, cargalos también como gasto.
+
+## Análisis por mes o por semana
+
+Arriba de todo en Análisis elegís **Por mes** o **Por semana**
+(las semanas van de lunes a domingo).
+
 ## ¿Y si cargo algo sin internet?
 
 Queda guardado en el teléfono y se sube solo cuando vuelve la conexión

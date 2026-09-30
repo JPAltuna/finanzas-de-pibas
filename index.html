@@ -127,12 +127,28 @@
   .barra .pista { height: 9px; background: rgba(30, 40, 36, .25); border-radius: 99px; overflow: hidden; }
   .barra .relleno { height: 100%; border-radius: 99px; background: var(--suave); }
   #mesSelector { margin-bottom: 14px; }
+  #perToggle { margin-bottom: 10px; }
+  .kpis.dos { grid-template-columns: 1fr 1fr; }
+
+  /* Deudas */
+  .deuda { padding: 10px 2px; border-bottom: 1px dashed var(--borde); }
+  .deuda:last-child { border-bottom: none; }
+  .deuda .cabecera { display: flex; justify-content: space-between; align-items: center; gap: 10px; cursor: pointer; }
+  .deuda .pista { height: 7px; background: rgba(30, 40, 36, .25); border-radius: 99px; overflow: hidden; margin-top: 7px; }
+  .deuda .relleno { height: 100%; border-radius: 99px; background: var(--amarillo); }
+  .deuda .detalle { display: none; margin-top: 8px; padding: 4px 12px 10px; background: rgba(30, 40, 36, .16); border-radius: 8px 3px 8px 3px; }
+  .deuda .detalle.abierto { display: block; }
+  .pagoForm { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; align-items: center; }
+  .pagoForm input { padding: 10px 12px; }
+  .pagoForm button { padding: 10px 14px; border: none; border-radius: 10px 3px 10px 3px; background: var(--kraft); color: #f6f1e8; font-weight: 800; cursor: pointer; font-family: inherit; }
+  .saldada { opacity: .65; }
+  .saldada .det b { text-decoration: line-through; }
 
   /* Tabs abajo */
   nav {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
     background: var(--crema); border-top: 1px solid var(--borde);
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: repeat(5, 1fr);
     padding-bottom: env(safe-area-inset-bottom);
     max-width: 640px; margin: 0 auto;
   }
@@ -347,8 +363,52 @@
     </div>
   </section>
 
+  <!-- ══════════ DEUDAS ══════════ -->
+  <section class="pantalla" id="p-deudas">
+    <div class="kpis dos">
+      <div class="kpi"><small>Debés</small><b id="kDebo" style="color:var(--terracota)">—</b></div>
+      <div class="kpi"><small>Te deben</small><b id="kMeDeben" style="color:var(--oliva)">—</b></div>
+    </div>
+    <div class="card">
+      <h2>Anotar una deuda</h2>
+      <label>¿Quién debe?</label>
+      <div class="toggle" id="dTipo">
+        <button type="button" data-v="Debo" class="activo">Debo yo</button>
+        <button type="button" data-v="Me deben">Me deben</button>
+      </div>
+      <div class="fila2">
+        <div>
+          <label for="dFecha">Fecha</label>
+          <input id="dFecha" type="date">
+        </div>
+        <div>
+          <label for="dMonto">Monto ($)</label>
+          <input id="dMonto" type="number" class="monto-grande" inputmode="decimal" min="0" step="0.01" placeholder="0">
+        </div>
+      </div>
+      <label for="dCon">¿Con quién?</label>
+      <input id="dCon" type="text" placeholder="Ej: Tarjeta, mamá, Flor…" autocomplete="off">
+      <label for="dNota">Nota (opcional)</label>
+      <input id="dNota" type="text" placeholder="¿De qué es?" autocomplete="off">
+      <button class="btn" id="btnDeuda">Guardar deuda</button>
+    </div>
+    <div class="card">
+      <h2>Deudas abiertas</h2>
+      <p class="hint" style="margin-bottom:8px;">Tocá una deuda para anotarle pagos y ver el detalle.</p>
+      <div id="listaDeudas" class="vacio">Sin deudas abiertas. ¡Qué alivio!</div>
+    </div>
+    <div class="card" id="cardSaldadas" style="display:none;">
+      <h2>Saldadas</h2>
+      <div id="listaSaldadas"></div>
+    </div>
+  </section>
+
   <!-- ══════════ ANÁLISIS ══════════ -->
   <section class="pantalla" id="p-analisis">
+    <div class="toggle" id="perToggle">
+      <button type="button" data-v="mes" class="activo">Por mes</button>
+      <button type="button" data-v="semana">Por semana</button>
+    </div>
     <select id="mesSelector"></select>
     <div class="kpis">
       <div class="kpi"><small>Ingresos</small><b id="kIngresos" style="color:var(--oliva)">—</b></div>
@@ -358,11 +418,11 @@
     <div class="card">
       <h2>Fijos vs variables</h2>
       <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Los fijos no tienen piedad; en los variables decidís vos.</p>
-      <div id="anFijosVar" class="vacio">Sin datos este mes.</div>
+      <div id="anFijosVar" class="vacio">Sin datos en este período.</div>
     </div>
     <div class="card">
       <h2>Gastos por categoría</h2>
-      <div id="anGastosCat" class="vacio">Sin datos este mes.</div>
+      <div id="anGastosCat" class="vacio">Sin datos en este período.</div>
     </div>
     <div class="card">
       <h2>Plata por cuenta (histórico)</h2>
@@ -380,6 +440,7 @@
   <button data-p="gastos" class="activo"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M2 5.5h20a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm-7.5 2.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm15 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg></span>Gastos</button>
   <button data-p="ingresos"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7H3.5a1 1 0 0 1 0-2H18a1 1 0 0 0 0-2H3.5A2.5 2.5 0 0 0 1 5.5V18a3 3 0 0 0 3 3h17a2 2 0 0 0 2-2v-4h-7.5a2.5 2.5 0 0 1 0-5H23V9a2 2 0 0 0-2-2z"/><path fill-rule="evenodd" d="M15.5 12H23v4h-7.5a2 2 0 0 1 0-4zm1.5.9a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg></span>Ingresos</button>
   <button data-p="inversiones"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 21v-8h4v8H2zm7 0V9h4v12H9zm7 0v-6h4v6h-4z"/><path d="M15 2h7v7l-2.4-2.4-5.4 5.4-2.2-2.2 5.4-5.4L15 2z"/></svg></span>Inversiones</button>
+  <button data-p="deudas"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v3h6.5v2H13v12h4v2H7v-2h4V7H4.5V5H11V2z"/><path d="M5.4 6.4 8.9 12H1.9l3.5-5.6zm-3.6 7a3.6 3.6 0 0 0 7.2 0H1.8zM18.6 6.4l3.5 5.6h-7l3.5-5.6zm-3.6 7a3.6 3.6 0 0 0 7.2 0H15z"/></svg></span>Deudas</button>
   <button data-p="analisis"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2a9.5 9.5 0 0 1 8.5 8.5h-8.5V2z"/><path d="M10.5 4.5a9 9 0 1 0 9 10.5h-9V4.5z"/></svg></span>Análisis</button>
 </nav>
 
@@ -401,14 +462,17 @@ var estado = {
   url: lsGet(LS.url, ''),
   config: lsGet(LS.config, null),
   extra: lsGet(LS.extra, { categoriasGastos: [], categoriasIngresos: [], cuentas: [] }),
-  datos: lsGet(LS.datos, { gastos: [], ingresos: [], inversiones: [] }),
+  datos: lsGet(LS.datos, { gastos: [], ingresos: [], inversiones: [], deudas: [] }),
   pendientes: lsGet(LS.pendientes, []),
   tipoInversion: 'Compra',
   tipoGasto: 'Variable',
+  tipoDeuda: 'Debo',
   monedaGasto: 'ARS',
   monedaIngreso: 'ARS',
+  periodo: 'mes',
   sincronizando: false
 };
+if (!estado.datos.deudas) estado.datos.deudas = []; // caché de versiones anteriores
 
 var $ = function (id) { return document.getElementById(id); };
 var fmtARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
@@ -433,7 +497,10 @@ function ahora() {
 var ESQUEMAS = {
   GASTOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'TIPO', 'MEDIO', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO_USD', 'COTIZACION'],
   INGRESOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'CUENTA', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO_USD', 'COTIZACION'],
-  INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO']
+  INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO'],
+  // En DEUDAS conviven las deudas (TIPO Debo / Me deben) y sus pagos
+  // (TIPO Pago, con DEUDA_ID apuntando a la deuda que achican)
+  DEUDAS: ['ID', 'FECHA', 'TIPO', 'CON', 'MONTO', 'NOTA', 'REGISTRADO', 'DEUDA_ID']
 };
 var CONFIG_COLS = {
   categoriasGastos: 'CATEGORIAS GASTOS',
@@ -465,7 +532,7 @@ function objDeDatos(datos) {
   return o;
 }
 function claveDeHoja(hoja) {
-  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : '';
+  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : '';
 }
 // Registros de la planilla + los que todavía están por subir (marcados _pendiente)
 function conPendientes(hoja) {
@@ -596,7 +663,7 @@ function sincronizar(conAviso) {
   if (!estado.url || estado.sincronizando) return Promise.resolve();
   estado.sincronizando = true;
   $('btnSync').textContent = '…';
-  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,CONFIG' }).then(function (r) {
+  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,CONFIG' }).then(function (r) {
     if (!r || !r.ok) {
       var msj = (r && r.error) ? r.error : 'la planilla respondió algo raro';
       if (/desconocida/i.test(msj)) msj = 'tu conector es de una versión vieja. Pegá el código nuevo en Apps Script y hacé "Nueva versión" (pasos en el README).';
@@ -606,7 +673,8 @@ function sincronizar(conAviso) {
     estado.datos = {
       gastos: filasAObjetos(h.GASTOS),
       ingresos: filasAObjetos(h.INGRESOS),
-      inversiones: filasAObjetos(h.INVERSIONES)
+      inversiones: filasAObjetos(h.INVERSIONES),
+      deudas: filasAObjetos(h.DEUDAS)
     };
     lsSet(LS.datos, estado.datos);
     var cfg = configDeCruda(h.CONFIG);
@@ -862,11 +930,146 @@ $('btnInversion').addEventListener('click', function () {
   }, this, function () { $('vMonto').value = ''; $('vCantidad').value = ''; $('vNota').value = ''; });
 });
 
+// ═══════════════ Deudas ═══════════════
+document.querySelectorAll('#dTipo button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    estado.tipoDeuda = b.dataset.v;
+    document.querySelectorAll('#dTipo button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+  });
+});
+$('btnDeuda').addEventListener('click', function () {
+  var monto = parseFloat($('dMonto').value);
+  if (!$('dFecha').value) return aviso('error', 'Poné la fecha de la deuda.');
+  if (!(monto > 0)) return aviso('error', 'Poné el monto de la deuda.');
+  if (!$('dCon').value.trim()) return aviso('error', 'Poné con quién es la deuda.');
+  var idD = nuevoId();
+  guardar({
+    accion: 'fila', hoja: 'DEUDAS', id: idD, esquema: ESQUEMAS.DEUDAS,
+    datos: {
+      ID: idD, FECHA: $('dFecha').value, TIPO: estado.tipoDeuda,
+      CON: $('dCon').value.trim(), MONTO: monto,
+      NOTA: $('dNota').value.trim(), REGISTRADO: ahora(), DEUDA_ID: ''
+    }
+  }, this, function () { $('dMonto').value = ''; $('dCon').value = ''; $('dNota').value = ''; });
+});
+function guardarPago(deuda, monto) {
+  var idP = nuevoId();
+  guardar({
+    accion: 'fila', hoja: 'DEUDAS', id: idP, esquema: ESQUEMAS.DEUDAS,
+    datos: {
+      ID: idP, FECHA: hoyISO(), TIPO: 'Pago', CON: deuda.con, MONTO: monto,
+      NOTA: '', REGISTRADO: ahora(), DEUDA_ID: deuda.id
+    }
+  }, null, function () {});
+}
+var deudaAbierta = null; // cuál está desplegada, para que sobreviva al repintado
+function pintarDeudas() {
+  var filas = conPendientes('DEUDAS');
+  var pagosPor = {};
+  filas.forEach(function (f) {
+    if (String(f.tipo) !== 'Pago' || !f.deuda_id) return;
+    (pagosPor[f.deuda_id] = pagosPor[f.deuda_id] || []).push(f);
+  });
+  var abiertas = [], saldadas = [], totDebo = 0, totMeDeben = 0;
+  filas.forEach(function (f) {
+    if (String(f.tipo) === 'Pago') return;
+    var pagado = (pagosPor[f.id] || []).reduce(function (s, p) { return s + (parseFloat(p.monto) || 0); }, 0);
+    var d = { deuda: f, pagado: pagado, saldo: (parseFloat(f.monto) || 0) - pagado };
+    if (d.saldo > 0.005) {
+      abiertas.push(d);
+      if (String(f.tipo) === 'Me deben') totMeDeben += d.saldo; else totDebo += d.saldo;
+    } else saldadas.push(d);
+  });
+  $('kDebo').textContent = fmtARS.format(totDebo);
+  $('kMeDeben').textContent = fmtARS.format(totMeDeben);
+
+  var el = $('listaDeudas');
+  if (!abiertas.length) { el.className = 'vacio'; el.textContent = 'Sin deudas abiertas. ¡Qué alivio!'; }
+  else {
+    el.className = ''; el.innerHTML = '';
+    abiertas.sort(function (a, b) { return ordenarPorFecha(a.deuda, b.deuda); }).forEach(function (d) {
+      var f = d.deuda;
+      var esMeDeben = String(f.tipo) === 'Me deben';
+      var caja = document.createElement('div'); caja.className = 'deuda';
+      var cab = document.createElement('div'); cab.className = 'cabecera';
+      var det = document.createElement('div'); det.className = 'det';
+      var b = document.createElement('b'); b.textContent = (esMeDeben ? '↓ ' : '↑ ') + (f.con || 'Deuda');
+      var s = document.createElement('small');
+      s.textContent = fmtFecha(f.fecha) + ' · ' + (esMeDeben ? 'te deben' : 'debés') +
+        (d.pagado > 0 ? ' · pagado ' + fmtARS.format(d.pagado) + ' de ' + fmtARS.format(f.monto || 0) : '') +
+        (f.nota ? ' · ' + f.nota : '');
+      if (f._pendiente) {
+        var tag = document.createElement('span'); tag.className = 'tagPend'; tag.textContent = ' · subiendo ↑';
+        s.appendChild(tag);
+      }
+      det.appendChild(b); det.appendChild(s);
+      var plata = document.createElement('div');
+      plata.className = 'plata ' + (esMeDeben ? 'ingreso' : 'gasto');
+      plata.textContent = fmtARS.format(d.saldo);
+      cab.appendChild(det); cab.appendChild(plata);
+      caja.appendChild(cab);
+      if (d.pagado > 0) {
+        var pista = document.createElement('div'); pista.className = 'pista';
+        var rel = document.createElement('div'); rel.className = 'relleno';
+        rel.style.width = Math.min(100, d.pagado / (parseFloat(f.monto) || 1) * 100) + '%';
+        pista.appendChild(rel);
+        caja.appendChild(pista);
+      }
+      var detalle = document.createElement('div');
+      detalle.className = 'detalle' + (deudaAbierta === f.id ? ' abierto' : '');
+      (pagosPor[f.id] || []).slice().sort(ordenarPorFecha).forEach(function (p) {
+        var m = document.createElement('div'); m.className = 'mov';
+        var izq = document.createElement('span');
+        izq.textContent = fmtFecha(p.fecha) + ' · pago' + (p._pendiente ? ' (subiendo ↑)' : '');
+        izq.style.fontSize = '.85rem';
+        var der = document.createElement('b'); der.textContent = fmtARS.format(p.monto || 0);
+        m.appendChild(izq); m.appendChild(der);
+        detalle.appendChild(m);
+      });
+      var form = document.createElement('div'); form.className = 'pagoForm';
+      var inp = document.createElement('input');
+      inp.type = 'number'; inp.min = '0'; inp.step = '0.01'; inp.inputMode = 'decimal';
+      inp.placeholder = esMeDeben ? '¿Cuánto te devolvieron?' : '¿Cuánto pagaste?';
+      var btnP = document.createElement('button'); btnP.type = 'button'; btnP.textContent = '＋ Pago';
+      btnP.addEventListener('click', function () {
+        var m = parseFloat(inp.value);
+        if (!(m > 0)) return aviso('error', 'Poné el monto del pago.');
+        guardarPago(f, m);
+      });
+      form.appendChild(inp); form.appendChild(btnP);
+      detalle.appendChild(form);
+      caja.appendChild(detalle);
+      cab.addEventListener('click', function () {
+        deudaAbierta = detalle.classList.toggle('abierto') ? f.id : null;
+      });
+      el.appendChild(caja);
+    });
+  }
+
+  $('cardSaldadas').style.display = saldadas.length ? 'block' : 'none';
+  var elS = $('listaSaldadas');
+  elS.innerHTML = '';
+  saldadas.sort(function (a, b) { return ordenarPorFecha(a.deuda, b.deuda); }).forEach(function (d) {
+    var f = d.deuda;
+    var div = document.createElement('div'); div.className = 'mov saldada';
+    var det = document.createElement('div'); det.className = 'det';
+    var b = document.createElement('b'); b.textContent = f.con || 'Deuda';
+    var s = document.createElement('small');
+    s.textContent = fmtFecha(f.fecha) + (String(f.tipo) === 'Me deben' ? ' · te debían' : ' · debías') + (f.nota ? ' · ' + f.nota : '');
+    det.appendChild(b); det.appendChild(s);
+    var plata = document.createElement('div'); plata.className = 'plata';
+    plata.textContent = fmtARS.format(f.monto || 0);
+    div.appendChild(det); div.appendChild(plata);
+    elS.appendChild(div);
+  });
+}
+
 // ═══════════════ Cola de pendientes (registros por subir) ═══════════════
 function descPendiente(r) {
   var d = r.datos || {};
-  var que = r.hoja === 'GASTOS' ? 'Gasto' : r.hoja === 'INGRESOS' ? 'Ingreso' : 'Inversión';
-  var detalle = d.CATEGORIA || d.PLATAFORMA || '';
+  var que = r.hoja === 'GASTOS' ? 'Gasto' : r.hoja === 'INGRESOS' ? 'Ingreso'
+    : r.hoja === 'DEUDAS' ? (d.TIPO === 'Pago' ? 'Pago de deuda' : 'Deuda') : 'Inversión';
+  var detalle = d.CATEGORIA || d.PLATAFORMA || d.CON || '';
   var monto = r.hoja === 'INVERSIONES' ? fmtUSD.format(parseFloat(d.MONTO_USD) || 0) : fmtARS.format(parseFloat(d.MONTO) || 0);
   return que + ' · ' + fmtFecha(d.FECHA) + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
 }
@@ -970,26 +1173,57 @@ function nombreMes(ym) {
   var p = ym.split('-');
   return MESES[parseInt(p[1], 10) - 1] + ' ' + p[0];
 }
+// Semana de lunes a domingo: la clave es el lunes (YYYY-MM-DD)
+function semanaDe(f) {
+  var p = String(f.fecha || '').slice(0, 10).split('-');
+  if (p.length !== 3) return '';
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  if (isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function nombreSemana(lunes) {
+  var p = lunes.split('-');
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  var fin = new Date(d.getTime()); fin.setDate(fin.getDate() + 6);
+  function dm(x) { return String(x.getDate()).padStart(2, '0') + '/' + String(x.getMonth() + 1).padStart(2, '0'); }
+  return 'Semana del ' + dm(d) + ' al ' + dm(fin) + (d.getFullYear() !== new Date().getFullYear() ? ' (' + d.getFullYear() + ')' : '');
+}
+function claveDePeriodo(f) {
+  if (estado.periodo === 'semana') return semanaDe(f);
+  var m = mesDe(f);
+  return m.length === 7 ? m : '';
+}
+function claveActual() {
+  return estado.periodo === 'semana' ? semanaDe({ fecha: hoyISO() }) : hoyISO().slice(0, 7);
+}
 function pintarSelectorMeses() {
-  var meses = {};
+  var claves = {};
   ['gastos', 'ingresos', 'inversiones'].forEach(function (k) {
-    (estado.datos[k] || []).forEach(function (f) { var m = mesDe(f); if (m.length === 7) meses[m] = true; });
+    (estado.datos[k] || []).forEach(function (f) { var c = claveDePeriodo(f); if (c) claves[c] = true; });
   });
-  var hoy = hoyISO().slice(0, 7);
-  meses[hoy] = true;
-  var lista = Object.keys(meses).sort().reverse();
+  claves[claveActual()] = true;
+  var lista = Object.keys(claves).sort().reverse();
   var sel = $('mesSelector');
   var previo = sel.value;
   sel.innerHTML = '';
-  lista.forEach(function (m) {
+  lista.forEach(function (c) {
     var o = document.createElement('option');
-    o.value = m; o.textContent = nombreMes(m);
+    o.value = c; o.textContent = estado.periodo === 'semana' ? nombreSemana(c) : nombreMes(c);
     sel.appendChild(o);
   });
-  sel.value = (previo && lista.indexOf(previo) >= 0) ? previo : hoy;
+  sel.value = (previo && lista.indexOf(previo) >= 0) ? previo : claveActual();
 }
+document.querySelectorAll('#perToggle button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    estado.periodo = b.dataset.v;
+    document.querySelectorAll('#perToggle button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+    $('mesSelector').value = '';
+    pintarAnalisis();
+  });
+});
 function barras(el, pares, formato) {
-  if (!pares.length) { el.className = 'vacio'; el.textContent = 'Sin datos este mes.'; return; }
+  if (!pares.length) { el.className = 'vacio'; el.textContent = 'Sin datos en este período.'; return; }
   el.className = ''; el.innerHTML = '';
   var max = Math.max.apply(null, pares.map(function (p) { return Math.abs(p[1]); })) || 1;
   pares.forEach(function (p) {
@@ -1009,7 +1243,7 @@ function barras(el, pares, formato) {
 // Torta de dos porciones (Fijos vs Variables)
 function tortaFijosVar(el, fijos, variables) {
   var tot = fijos + variables;
-  if (!(tot > 0)) { el.className = 'vacio'; el.textContent = 'Sin datos este mes.'; return; }
+  if (!(tot > 0)) { el.className = 'vacio'; el.textContent = 'Sin datos en este período.'; return; }
   var pf = Math.round(fijos / tot * 100);
   el.className = 'torta';
   el.innerHTML =
@@ -1027,7 +1261,7 @@ function tortaFijosVar(el, fijos, variables) {
 
 // Barras con detalle desplegable: tocás una categoría y ves sus movimientos
 function barrasDesplegables(el, pares, formato, filasPorClave) {
-  if (!pares.length) { el.className = 'vacio'; el.textContent = 'Sin datos este mes.'; return; }
+  if (!pares.length) { el.className = 'vacio'; el.textContent = 'Sin datos en este período.'; return; }
   el.className = ''; el.innerHTML = '';
   var max = Math.max.apply(null, pares.map(function (p) { return Math.abs(p[1]); })) || 1;
   pares.forEach(function (p) {
@@ -1076,9 +1310,9 @@ function sumarPor(filas, campo, valor) {
 function pintarAnalisis() {
   pintarSelectorMeses();
   var mes = $('mesSelector').value;
-  var gastosMes = conPendientes('GASTOS').filter(function (f) { return mesDe(f) === mes; });
-  var ingresosMes = conPendientes('INGRESOS').filter(function (f) { return mesDe(f) === mes; });
-  var invMes = conPendientes('INVERSIONES').filter(function (f) { return mesDe(f) === mes; });
+  var gastosMes = conPendientes('GASTOS').filter(function (f) { return claveDePeriodo(f) === mes; });
+  var ingresosMes = conPendientes('INGRESOS').filter(function (f) { return claveDePeriodo(f) === mes; });
+  var invMes = conPendientes('INVERSIONES').filter(function (f) { return claveDePeriodo(f) === mes; });
 
   var totG = gastosMes.reduce(function (s, f) { return s + (parseFloat(f.monto) || 0); }, 0);
   var totI = ingresosMes.reduce(function (s, f) { return s + (parseFloat(f.monto) || 0); }, 0);
@@ -1152,6 +1386,7 @@ function pintarTodo() {
   pintarLista('listaGastos', conPendientes('GASTOS'), 'gasto');
   pintarLista('listaIngresos', conPendientes('INGRESOS'), 'ingreso');
   pintarLista('listaInversiones', conPendientes('INVERSIONES'), 'inversion');
+  pintarDeudas();
   pintarPendientes();
   if ($('p-analisis').classList.contains('activa')) pintarAnalisis();
 }
@@ -1160,6 +1395,7 @@ function pintarTodo() {
 $('gFecha').value = hoyISO();
 $('iFecha').value = hoyISO();
 $('vFecha').value = hoyISO();
+$('dFecha').value = hoyISO();
 pintarTodo();
 if (!estado.url) {
   abrirSetup(false);
