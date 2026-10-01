@@ -199,6 +199,7 @@
   .leyenda .item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: .9rem; }
   .leyenda .cuadr { width: 13px; height: 13px; border-radius: 4px 1px 4px 1px; flex: none; }
   .leyenda b { margin-left: auto; white-space: nowrap; }
+  .verMas { display: block; cursor: pointer; margin-top: 10px; font-size: .84rem; font-weight: 700; color: var(--amarillo); }
 </style>
 </head>
 <body>
@@ -1240,13 +1241,16 @@ function barras(el, pares, formato) {
     el.appendChild(d);
   });
 }
-// Torta de dos porciones (Fijos vs Variables)
-function tortaFijosVar(el, fijos, variables) {
+// Torta de dos porciones (Fijos vs Variables), desplegable para ver
+// cuáles son los fijos y en qué momento del mes caen
+var fijosDetalleAbierto = false;
+function tortaFijosVar(el, fijos, variables, filasFijas, esMes) {
   var tot = fijos + variables;
   if (!(tot > 0)) { el.className = 'vacio'; el.textContent = 'Sin datos en este período.'; return; }
   var pf = Math.round(fijos / tot * 100);
-  el.className = 'torta';
+  el.className = '';
   el.innerHTML =
+    '<div class="torta">' +
     '<svg viewBox="0 0 42 42">' +
     '<circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--amarillo)" stroke-width="8"></circle>' +
     (fijos > 0 ? '<circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--terracota)" stroke-width="8" pathLength="100" stroke-dasharray="' + (fijos / tot * 100) + ' 100" transform="rotate(-90 21 21)"></circle>' : '') +
@@ -1256,7 +1260,48 @@ function tortaFijosVar(el, fijos, variables) {
     '<div class="leyenda">' +
     '<div class="item"><span class="cuadr" style="background:var(--terracota)"></span>Fijos (' + pf + '%)<b>' + fmtARS.format(fijos) + '</b></div>' +
     '<div class="item"><span class="cuadr" style="background:var(--amarillo)"></span>Variables (' + (100 - pf) + '%)<b>' + fmtARS.format(variables) + '</b></div>' +
+    '</div>' +
     '</div>';
+  if (!filasFijas || !filasFijas.length) return;
+
+  var ver = document.createElement('span');
+  ver.className = 'verMas';
+  ver.textContent = (fijosDetalleAbierto ? '▾' : '▸') + ' Ver cuáles son los fijos';
+  el.appendChild(ver);
+
+  var det = document.createElement('div');
+  det.className = 'detalleCat' + (fijosDetalleAbierto ? ' abierto' : '');
+  // Orden cronológico: así se ve en qué momento caen
+  filasFijas.slice().sort(function (a, b) { return String(a.fecha).localeCompare(String(b.fecha)); }).forEach(function (f) {
+    var m = document.createElement('div'); m.className = 'mov';
+    var izq = document.createElement('span');
+    izq.textContent = fmtFecha(f.fecha) + ' · ' + (f.categoria || 'Sin dato') + (f.nota ? ' · ' + f.nota : '');
+    var der = document.createElement('b');
+    der.textContent = fmtARS.format(f.monto || 0);
+    m.appendChild(izq); m.appendChild(der);
+    det.appendChild(m);
+  });
+  if (esMes) {
+    var tit = document.createElement('p');
+    tit.className = 'hint';
+    tit.style.marginTop = '12px';
+    tit.textContent = '¿En qué momento del mes caen?';
+    det.appendChild(tit);
+    var tramos = [['Del 1 al 7', 0], ['Del 8 al 14', 0], ['Del 15 al 21', 0], ['Del 22 al fin', 0]];
+    filasFijas.forEach(function (f) {
+      var dia = parseInt(String(f.fecha).slice(8, 10), 10) || 1;
+      tramos[Math.min(3, Math.floor((dia - 1) / 7))][1] += parseFloat(f.monto) || 0;
+    });
+    var cont = document.createElement('div');
+    barras(cont, tramos, fmtARS);
+    cont.querySelectorAll('.relleno').forEach(function (r) { r.style.background = 'var(--terracota)'; });
+    det.appendChild(cont);
+  }
+  el.appendChild(det);
+  ver.addEventListener('click', function () {
+    fijosDetalleAbierto = det.classList.toggle('abierto');
+    ver.textContent = (fijosDetalleAbierto ? '▾' : '▸') + ' Ver cuáles son los fijos';
+  });
 }
 
 // Barras con detalle desplegable: tocás una categoría y ves sus movimientos
@@ -1329,7 +1374,9 @@ function pintarAnalisis() {
     var m = parseFloat(f.monto) || 0;
     if (String(f.tipo) === 'Fijo') fv.Fijos += m; else fv.Variables += m;
   });
-  tortaFijosVar($('anFijosVar'), fv.Fijos, fv.Variables);
+  tortaFijosVar($('anFijosVar'), fv.Fijos, fv.Variables,
+    gastosMes.filter(function (f) { return String(f.tipo) === 'Fijo'; }),
+    estado.periodo === 'mes');
 
   var porCat = {};
   gastosMes.forEach(function (f) {
