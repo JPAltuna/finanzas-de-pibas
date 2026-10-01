@@ -200,6 +200,10 @@
   .leyenda .cuadr { width: 13px; height: 13px; border-radius: 4px 1px 4px 1px; flex: none; }
   .leyenda b { margin-left: auto; white-space: nowrap; }
   .verMas { display: block; cursor: pointer; margin-top: 10px; font-size: .84rem; font-weight: 700; color: var(--amarillo); }
+  .filtros { margin-bottom: 10px; }
+  .filtros select { padding: 9px 10px; font-size: .88rem; }
+  .totalFiltro { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; margin-top: 4px; border-top: 1.5px solid var(--borde); font-size: .9rem; }
+  .totalFiltro b { color: var(--amarillo); }
 </style>
 </head>
 <body>
@@ -284,7 +288,11 @@
       <button class="btn" id="btnGasto">Guardar gasto</button>
     </div>
     <div class="card">
-      <h2>Últimos gastos</h2>
+      <h2>Tus gastos</h2>
+      <div class="fila2 filtros">
+        <select id="gFiltroMes"></select>
+        <select id="gFiltroVal"></select>
+      </div>
       <div id="listaGastos" class="vacio">Todavía no hay gastos cargados.</div>
     </div>
   </section>
@@ -322,7 +330,11 @@
       <button class="btn" id="btnIngreso">Guardar ingreso</button>
     </div>
     <div class="card">
-      <h2>Últimos ingresos</h2>
+      <h2>Tus ingresos</h2>
+      <div class="fila2 filtros">
+        <select id="iFiltroMes"></select>
+        <select id="iFiltroVal"></select>
+      </div>
       <div id="listaIngresos" class="vacio">Todavía no hay ingresos cargados.</div>
     </div>
   </section>
@@ -359,7 +371,11 @@
       <button class="btn" id="btnInversion">Guardar inversión</button>
     </div>
     <div class="card">
-      <h2>Últimos movimientos</h2>
+      <h2>Tus movimientos</h2>
+      <div class="fila2 filtros">
+        <select id="vFiltroMes"></select>
+        <select id="vFiltroVal"></select>
+      </div>
       <div id="listaInversiones" class="vacio">Todavía no hay inversiones cargadas.</div>
     </div>
   </section>
@@ -1127,13 +1143,63 @@ function procesarCola() {
 }
 window.addEventListener('online', procesarCola);
 
-// ═══════════════ Listas de últimos movimientos ═══════════════
+// ═══════════════ Listas de movimientos (con filtros) ═══════════════
 function ordenarPorFecha(a, b) { return String(b.fecha).localeCompare(String(a.fecha)); }
-function pintarLista(idEl, filas, tipo) {
+// Sin filtro se ven los últimos 8; con filtro (mes y/o categoría) se ven
+// TODOS los que coinciden, con el total abajo.
+var FILTROS = { g: { mes: '', val: '' }, i: { mes: '', val: '' }, v: { mes: '', val: '' } };
+var CAMPO_FILTRO = { g: 'categoria', i: 'categoria', v: 'plataforma' };
+function rellenarFiltro(sel, claves, formato, textoTodo, elegido) {
+  sel.innerHTML = '';
+  var o0 = document.createElement('option');
+  o0.value = ''; o0.textContent = textoTodo;
+  sel.appendChild(o0);
+  claves.forEach(function (c) {
+    var o = document.createElement('option');
+    o.value = c; o.textContent = formato ? formato(c) : c;
+    sel.appendChild(o);
+  });
+  sel.value = claves.indexOf(elegido) >= 0 ? elegido : '';
+}
+function pintarFiltros(pfx, filas) {
+  var meses = {}, vals = {};
+  filas.forEach(function (f) {
+    var m = mesDe(f);
+    if (m.length === 7) meses[m] = true;
+    vals[String(f[CAMPO_FILTRO[pfx]] || 'Sin dato')] = true;
+  });
+  var selMes = $(pfx + 'FiltroMes'), selVal = $(pfx + 'FiltroVal');
+  rellenarFiltro(selMes, Object.keys(meses).sort().reverse(), nombreMes, 'Últimos', FILTROS[pfx].mes);
+  rellenarFiltro(selVal, Object.keys(vals).sort(), null, pfx === 'v' ? 'Todas las plataformas' : 'Todas las categorías', FILTROS[pfx].val);
+  FILTROS[pfx].mes = selMes.value;
+  FILTROS[pfx].val = selVal.value;
+}
+['g', 'i', 'v'].forEach(function (pfx) {
+  ['FiltroMes', 'FiltroVal'].forEach(function (suf) {
+    $(pfx + suf).addEventListener('change', function () {
+      FILTROS[pfx].mes = $(pfx + 'FiltroMes').value;
+      FILTROS[pfx].val = $(pfx + 'FiltroVal').value;
+      pintarTodo();
+    });
+  });
+});
+function pintarLista(idEl, filas, tipo, pfx) {
   var el = $(idEl);
-  if (!filas.length) { el.className = 'vacio'; el.textContent = 'Todavía no hay nada cargado.'; return; }
+  pintarFiltros(pfx, filas);
+  var filtro = FILTROS[pfx];
+  var conFiltro = !!(filtro.mes || filtro.val);
+  var lista = filas.slice();
+  if (filtro.mes) lista = lista.filter(function (f) { return mesDe(f) === filtro.mes; });
+  if (filtro.val) lista = lista.filter(function (f) { return String(f[CAMPO_FILTRO[pfx]] || 'Sin dato') === filtro.val; });
+  if (!lista.length) {
+    el.className = 'vacio';
+    el.textContent = conFiltro ? 'Nada con ese filtro.' : 'Todavía no hay nada cargado.';
+    return;
+  }
   el.className = ''; el.innerHTML = '';
-  filas.slice().sort(ordenarPorFecha).slice(0, 8).forEach(function (f) {
+  lista.sort(ordenarPorFecha);
+  if (!conFiltro) lista = lista.slice(0, 8);
+  lista.forEach(function (f) {
     var div = document.createElement('div');
     div.className = 'mov';
     var det = document.createElement('div'); det.className = 'det';
@@ -1165,6 +1231,23 @@ function pintarLista(idEl, filas, tipo) {
     div.appendChild(det); div.appendChild(plata);
     el.appendChild(div);
   });
+  if (conFiltro) {
+    var tot = lista.reduce(function (s, f) {
+      if (tipo === 'inversion') {
+        var m = parseFloat(f.monto_usd) || 0;
+        return s + (String(f.tipo).toLowerCase() === 'venta' ? -m : m);
+      }
+      return s + (parseFloat(f.monto) || 0);
+    }, 0);
+    var pie = document.createElement('div');
+    pie.className = 'totalFiltro';
+    var izq = document.createElement('span');
+    izq.textContent = lista.length + (lista.length === 1 ? ' movimiento' : ' movimientos');
+    var der = document.createElement('b');
+    der.textContent = (tipo === 'inversion' ? fmtUSD : fmtARS).format(tot);
+    pie.appendChild(izq); pie.appendChild(der);
+    el.appendChild(pie);
+  }
 }
 
 // ═══════════════ Análisis mensual ═══════════════
@@ -1430,9 +1513,9 @@ $('mesSelector').addEventListener('change', pintarAnalisis);
 // ═══════════════ Pintar todo ═══════════════
 function pintarTodo() {
   pintarConfig();
-  pintarLista('listaGastos', conPendientes('GASTOS'), 'gasto');
-  pintarLista('listaIngresos', conPendientes('INGRESOS'), 'ingreso');
-  pintarLista('listaInversiones', conPendientes('INVERSIONES'), 'inversion');
+  pintarLista('listaGastos', conPendientes('GASTOS'), 'gasto', 'g');
+  pintarLista('listaIngresos', conPendientes('INGRESOS'), 'ingreso', 'i');
+  pintarLista('listaInversiones', conPendientes('INVERSIONES'), 'inversion', 'v');
   pintarDeudas();
   pintarPendientes();
   if ($('p-analisis').classList.contains('activa')) pintarAnalisis();
