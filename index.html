@@ -163,6 +163,16 @@
   .pantalla { display: none; }
   .pantalla.activa { display: block; }
 
+  /* En pantallas grandes (PC) la app usa todo el ancho, en dos columnas.
+     En el celu queda igual que siempre (una columna de 640px). */
+  @media (min-width: 900px) {
+    header { padding-left: 40px; padding-right: 40px; }
+    main { max-width: none; padding: 24px 40px; }
+    nav { max-width: none; }
+    .pantalla.activa { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; align-items: start; }
+    .pantalla.activa > .kpis { grid-column: 1 / -1; }
+  }
+
   #pendientesAviso {
     display: none; margin-bottom: 12px; padding: 10px 14px;
     border-radius: 12px 4px 12px 4px; background: #74705c; color: #f4f0e0;
