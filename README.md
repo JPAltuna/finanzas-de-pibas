@@ -76,6 +76,16 @@ si querés que cuenten en el análisis, cargalos también como gasto.
 Arriba de todo en Análisis elegís **Por mes** o **Por semana**
 (las semanas van de lunes a domingo).
 
+## Presupuesto mensual
+
+En la configuración (⚙) podés ponerle un **tope mensual** a cada categoría
+de gastos. En Análisis, "Gastos por categoría" te compara lo real contra
+ese tope (la barra se pone terracota si te pasaste). Abajo de la torta de
+fijos vs variables está la **regla 50-30-20**: de tus ingresos, hasta 50%
+a fijos, hasta 30% a variables y al menos 20% para ahorrar. Y la tarjeta
+"Presupuesto y fondo de seguridad" promedia tus últimos 6 meses para
+proyectar (ingreso estimado + fondo de seguridad de 6 meses de fijos).
+
 ## ¿Y si cargo algo sin internet?
 
 Queda guardado en el teléfono y se sube solo cuando vuelve la conexión

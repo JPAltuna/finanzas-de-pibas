@@ -218,6 +218,10 @@
   .proyRow b { white-space: nowrap; }
   .proyRow.grande { border-bottom: none; padding-top: 12px; font-weight: 700; }
   .proyRow.grande b { font-size: 1.15rem; }
+  .presRow { display: grid; grid-template-columns: 1fr 150px; gap: 10px; align-items: center; margin-top: 8px; font-size: .92rem; }
+  .presRow input { padding: 9px 10px; text-align: right; }
+  .regla { margin-top: 12px; border-top: 1px dashed var(--borde); padding-top: 8px; }
+  .reglaRow { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; font-size: .86rem; }
 </style>
 </head>
 <body>
@@ -260,6 +264,12 @@
       <div class="chips" id="chipsIngresos"></div>
       <label>Cuentas y medios de pago</label>
       <div class="chips" id="chipsCuentas"></div>
+    </div>
+    <div class="card" id="cardPresupuesto" style="display:none;">
+      <h2>Presupuesto mensual</h2>
+      <p style="font-size:.85rem;color:var(--suave);line-height:1.5;">Cuánto querés gastar como máximo por mes en cada categoría. En Análisis, "Gastos por categoría" te compara lo real contra esto. Las que dejes en blanco quedan sin presupuesto.</p>
+      <div id="presupuestoInputs"></div>
+      <button class="btn" id="btnPresupuesto">Guardar presupuesto</button>
     </div>
   </section>
 
@@ -509,6 +519,7 @@ var estado = {
   sincronizando: false
 };
 if (!estado.datos.deudas) estado.datos.deudas = []; // caché de versiones anteriores
+if (!estado.datos.presupuesto) estado.datos.presupuesto = [];
 
 var $ = function (id) { return document.getElementById(id); };
 var fmtARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
@@ -536,7 +547,9 @@ var ESQUEMAS = {
   INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO'],
   // En DEUDAS conviven las deudas (TIPO Debo / Me deben) y sus pagos
   // (TIPO Pago, con DEUDA_ID apuntando a la deuda que achican)
-  DEUDAS: ['ID', 'FECHA', 'TIPO', 'CON', 'MONTO', 'NOTA', 'REGISTRADO', 'DEUDA_ID']
+  DEUDAS: ['ID', 'FECHA', 'TIPO', 'CON', 'MONTO', 'NOTA', 'REGISTRADO', 'DEUDA_ID'],
+  // Presupuesto mensual por categoría: vale la fila más nueva de cada una
+  PRESUPUESTO: ['ID', 'CATEGORIA', 'MONTO', 'REGISTRADO']
 };
 var CONFIG_COLS = {
   categoriasGastos: 'CATEGORIAS GASTOS',
@@ -568,7 +581,7 @@ function objDeDatos(datos) {
   return o;
 }
 function claveDeHoja(hoja) {
-  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : '';
+  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : hoja === 'PRESUPUESTO' ? 'presupuesto' : '';
 }
 // Registros de la planilla + los que todavía están por subir (marcados _pendiente)
 function conPendientes(hoja) {
@@ -699,7 +712,7 @@ function sincronizar(conAviso) {
   if (!estado.url || estado.sincronizando) return Promise.resolve();
   estado.sincronizando = true;
   $('btnSync').textContent = '…';
-  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,CONFIG' }).then(function (r) {
+  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,PRESUPUESTO,CONFIG' }).then(function (r) {
     if (!r || !r.ok) {
       var msj = (r && r.error) ? r.error : 'la planilla respondió algo raro';
       if (/desconocida/i.test(msj)) msj = 'tu conector es de una versión vieja. Pegá el código nuevo en Apps Script y hacé "Nueva versión" (pasos en el README).';
@@ -710,7 +723,8 @@ function sincronizar(conAviso) {
       gastos: filasAObjetos(h.GASTOS),
       ingresos: filasAObjetos(h.INGRESOS),
       inversiones: filasAObjetos(h.INVERSIONES),
-      deudas: filasAObjetos(h.DEUDAS)
+      deudas: filasAObjetos(h.DEUDAS),
+      presupuesto: filasAObjetos(h.PRESUPUESTO)
     };
     lsSet(LS.datos, estado.datos);
     var cfg = configDeCruda(h.CONFIG);
@@ -848,11 +862,60 @@ function pintarChipsDe(idEl, listaKey) {
 function pintarChips() {
   var hay = opcionesDe('categoriasGastos').length || opcionesDe('categoriasIngresos').length || opcionesDe('cuentas').length;
   $('cardOpciones').style.display = hay ? 'block' : 'none';
+  pintarPresupuestoInputs();
   if (!hay) return;
   pintarChipsDe('chipsGastos', 'categoriasGastos');
   pintarChipsDe('chipsIngresos', 'categoriasIngresos');
   pintarChipsDe('chipsCuentas', 'cuentas');
 }
+
+// ═══════════════ Presupuesto mensual por categoría ═══════════════
+// Se guarda en la hoja PRESUPUESTO; vale la fila más nueva de cada categoría.
+function presupuestoVigente() {
+  var map = {};
+  conPendientes('PRESUPUESTO').forEach(function (f) {
+    map[String(f.categoria || '').toLowerCase()] = parseFloat(f.monto) || 0;
+  });
+  return map;
+}
+function pintarPresupuestoInputs() {
+  var cats = opcionesDe('categoriasGastos');
+  $('cardPresupuesto').style.display = cats.length ? 'block' : 'none';
+  if (!cats.length) return;
+  var vig = presupuestoVigente();
+  var cont = $('presupuestoInputs');
+  cont.innerHTML = '';
+  cats.forEach(function (c) {
+    var fila = document.createElement('div');
+    fila.className = 'presRow';
+    var lab = document.createElement('span'); lab.textContent = c;
+    var inp = document.createElement('input');
+    inp.type = 'number'; inp.min = '0'; inp.step = '0.01'; inp.inputMode = 'decimal';
+    inp.placeholder = 'Sin tope';
+    inp.dataset.cat = c;
+    var m = vig[c.toLowerCase()];
+    if (m > 0) inp.value = m;
+    fila.appendChild(lab); fila.appendChild(inp);
+    cont.appendChild(fila);
+  });
+}
+$('btnPresupuesto').addEventListener('click', function () {
+  var vig = presupuestoVigente();
+  var cambios = 0;
+  document.querySelectorAll('#presupuestoInputs input').forEach(function (inp) {
+    var cat = inp.dataset.cat;
+    var nuevo = inp.value.trim() === '' ? 0 : (parseFloat(inp.value) || 0);
+    var actual = vig[cat.toLowerCase()] || 0;
+    if (nuevo === actual) return;
+    cambios++;
+    var idP = nuevoId();
+    guardar({
+      accion: 'fila', hoja: 'PRESUPUESTO', id: idP, esquema: ESQUEMAS.PRESUPUESTO,
+      datos: { ID: idP, CATEGORIA: cat, MONTO: nuevo, REGISTRADO: ahora() }
+    }, null, function () {});
+  });
+  aviso(cambios ? 'ok' : 'info', cambios ? 'Presupuesto guardado.' : 'No cambiaste ningún monto.');
+});
 
 // ═══════════════ Guardar registros ═══════════════
 // El registro se anota al toque (aparece ya mismo en la lista y el formulario
@@ -1104,10 +1167,11 @@ function pintarDeudas() {
 function descPendiente(r) {
   var d = r.datos || {};
   var que = r.hoja === 'GASTOS' ? 'Gasto' : r.hoja === 'INGRESOS' ? 'Ingreso'
-    : r.hoja === 'DEUDAS' ? (d.TIPO === 'Pago' ? 'Pago de deuda' : 'Deuda') : 'Inversión';
+    : r.hoja === 'DEUDAS' ? (d.TIPO === 'Pago' ? 'Pago de deuda' : 'Deuda')
+    : r.hoja === 'PRESUPUESTO' ? 'Presupuesto' : 'Inversión';
   var detalle = d.CATEGORIA || d.PLATAFORMA || d.CON || '';
   var monto = r.hoja === 'INVERSIONES' ? fmtUSD.format(parseFloat(d.MONTO_USD) || 0) : fmtARS.format(parseFloat(d.MONTO) || 0);
-  return que + ' · ' + fmtFecha(d.FECHA) + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
+  return que + (d.FECHA ? ' · ' + fmtFecha(d.FECHA) : '') + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
 }
 function pintarPendientes() {
   var el = $('pendientesAviso');
@@ -1406,20 +1470,30 @@ function tortaFijosVar(el, fijos, variables, filasFijas, esMes) {
   });
 }
 
-// Barras con detalle desplegable: tocás una categoría y ves sus movimientos
-function barrasDesplegables(el, pares, formato, filasPorClave) {
+// Barras con detalle desplegable: tocás una categoría y ves sus movimientos.
+// Si la categoría tiene presupuesto, la barra muestra cuánto del tope va usado
+// (amarillo; terracota si se pasó) y el texto dice "real de presupuestado".
+function barrasDesplegables(el, pares, formato, filasPorClave, presup) {
   if (!pares.length) { el.className = 'vacio'; el.textContent = 'Sin datos en este período.'; return; }
   el.className = ''; el.innerHTML = '';
   var max = Math.max.apply(null, pares.map(function (p) { return Math.abs(p[1]); })) || 1;
   pares.forEach(function (p) {
+    var tope = presup ? (presup[String(p[0]).toLowerCase()] || 0) : 0;
     var d = document.createElement('div'); d.className = 'barra clickeable';
     var info = document.createElement('div'); info.className = 'info';
     var n = document.createElement('span'); n.textContent = '▸ ' + p[0];
-    var v = document.createElement('b'); v.textContent = formato.format(p[1]);
+    var v = document.createElement('b');
+    v.textContent = formato.format(p[1]) + (tope > 0 ? ' de ' + formato.format(tope) : '');
+    if (tope > 0 && p[1] > tope) v.style.color = 'var(--terracota)';
     info.appendChild(n); info.appendChild(v);
     var pista = document.createElement('div'); pista.className = 'pista';
     var rel = document.createElement('div'); rel.className = 'relleno';
-    rel.style.width = Math.max(3, Math.abs(p[1]) / max * 100) + '%';
+    if (tope > 0) {
+      rel.style.width = Math.max(3, Math.min(100, p[1] / tope * 100)) + '%';
+      rel.style.background = p[1] > tope ? 'var(--terracota)' : 'var(--amarillo)';
+    } else {
+      rel.style.width = Math.max(3, Math.abs(p[1]) / max * 100) + '%';
+    }
     pista.appendChild(rel);
     d.appendChild(info); d.appendChild(pista);
     el.appendChild(d);
@@ -1444,6 +1518,35 @@ function barrasDesplegables(el, pares, formato, filasPorClave) {
       n.textContent = (abierto ? '▾ ' : '▸ ') + p[0];
     });
   });
+}
+
+// Regla 50-30-20 del curso: de los ingresos, hasta 50% a fijos, hasta 30%
+// a variables y al menos 20% queda para ahorrar. Va al pie de la torta.
+function regla503020(el, fijos, variables, ingresos) {
+  if (!(ingresos > 0) || el.className === 'vacio') return;
+  var cont = document.createElement('div');
+  cont.className = 'regla';
+  var tit = document.createElement('p');
+  tit.className = 'hint';
+  tit.textContent = 'Regla 50-30-20 (sobre tus ingresos del período):';
+  cont.appendChild(tit);
+  var ahorro = ingresos - fijos - variables;
+  [
+    ['Fijos', fijos / ingresos * 100, 'hasta 50%', fijos / ingresos <= 0.5],
+    ['Variables', variables / ingresos * 100, 'hasta 30%', variables / ingresos <= 0.3],
+    ['Queda para ahorrar', ahorro / ingresos * 100, 'al menos 20%', ahorro / ingresos >= 0.2]
+  ].forEach(function (r) {
+    var d = document.createElement('div');
+    d.className = 'reglaRow';
+    var izq = document.createElement('span');
+    izq.textContent = r[0] + ': ' + Math.round(r[1]) + '% · meta ' + r[2];
+    var marca = document.createElement('b');
+    marca.textContent = r[3] ? '✓' : '⚠';
+    marca.style.color = r[3] ? 'var(--oliva)' : 'var(--terracota)';
+    d.appendChild(izq); d.appendChild(marca);
+    cont.appendChild(d);
+  });
+  el.appendChild(cont);
 }
 
 // ═══ Proyección: promedios de los últimos 6 meses completos ═══
@@ -1532,13 +1635,15 @@ function pintarAnalisis() {
   tortaFijosVar($('anFijosVar'), fv.Fijos, fv.Variables,
     gastosMes.filter(function (f) { return String(f.tipo) === 'Fijo'; }),
     estado.periodo === 'mes');
+  regla503020($('anFijosVar'), fv.Fijos, fv.Variables, totI);
 
   var porCat = {};
   gastosMes.forEach(function (f) {
     var k = f.categoria || 'Sin dato';
     (porCat[k] = porCat[k] || []).push(f);
   });
-  barrasDesplegables($('anGastosCat'), sumarPor(gastosMes, 'categoria', 'monto'), fmtARS, porCat);
+  barrasDesplegables($('anGastosCat'), sumarPor(gastosMes, 'categoria', 'monto'), fmtARS, porCat,
+    estado.periodo === 'mes' ? presupuestoVigente() : null);
 
   // Balance por cuenta: histórico completo (ingresos − gastos por cuenta/medio)
   var cuentas = {};
