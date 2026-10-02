@@ -214,6 +214,10 @@
   .filtros select { padding: 9px 10px; font-size: .88rem; }
   .totalFiltro { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; margin-top: 4px; border-top: 1.5px solid var(--borde); font-size: .9rem; }
   .totalFiltro b { color: var(--amarillo); }
+  .proyRow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 2px; border-bottom: 1px dashed var(--borde); font-size: .92rem; }
+  .proyRow b { white-space: nowrap; }
+  .proyRow.grande { border-bottom: none; padding-top: 12px; font-weight: 700; }
+  .proyRow.grande b { font-size: 1.15rem; }
 </style>
 </head>
 <body>
@@ -459,6 +463,11 @@
     <div class="card">
       <h2>Inversiones</h2>
       <div id="anInversiones" class="vacio">Sin inversiones registradas.</div>
+    </div>
+    <div class="card">
+      <h2>Presupuesto y fondo de seguridad</h2>
+      <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Promedios de tus últimos meses completos (el mes en curso no cuenta porque todavía no terminó). Son los números para proyectar tu presupuesto.</p>
+      <div id="anProyeccion" class="vacio">Todavía no hay meses completos para promediar.</div>
     </div>
   </section>
 </main>
@@ -1437,6 +1446,58 @@ function barrasDesplegables(el, pares, formato, filasPorClave) {
   });
 }
 
+// ═══ Proyección: promedios de los últimos 6 meses completos ═══
+// (consejo del curso: con ingresos variables, promediar los últimos 6 meses
+// para proyectar; y tener un fondo de seguridad de 6 meses de gastos fijos)
+function pintarProyeccion() {
+  var mesActual = hoyISO().slice(0, 7);
+  var porMes = {};
+  function mesDato(f) {
+    var m = mesDe(f);
+    if (m.length !== 7 || m >= mesActual) return null; // solo meses completos
+    return porMes[m] = porMes[m] || { ing: 0, fijos: 0, variables: 0 };
+  }
+  conPendientes('INGRESOS').forEach(function (f) {
+    var d = mesDato(f); if (d) d.ing += parseFloat(f.monto) || 0;
+  });
+  conPendientes('GASTOS').forEach(function (f) {
+    var d = mesDato(f); if (!d) return;
+    if (String(f.tipo) === 'Fijo') d.fijos += parseFloat(f.monto) || 0;
+    else d.variables += parseFloat(f.monto) || 0;
+  });
+  var meses = Object.keys(porMes).sort().reverse().slice(0, 6);
+  var el = $('anProyeccion');
+  if (!meses.length) {
+    el.className = 'vacio';
+    el.textContent = 'Todavía no hay meses completos para promediar. Cuando termine tu primer mes, acá aparecen tus promedios.';
+    return;
+  }
+  var n = meses.length;
+  var ing = 0, fijos = 0, variables = 0;
+  meses.forEach(function (m) { ing += porMes[m].ing; fijos += porMes[m].fijos; variables += porMes[m].variables; });
+  ing /= n; fijos /= n; variables /= n;
+  var desde = meses[meses.length - 1], hasta = meses[0];
+  el.className = ''; el.innerHTML = '';
+  function fila(texto, valor, color, grande) {
+    var d = document.createElement('div');
+    d.className = 'proyRow' + (grande ? ' grande' : '');
+    var izq = document.createElement('span'); izq.textContent = texto;
+    var der = document.createElement('b'); der.textContent = fmtARS.format(valor);
+    if (color) der.style.color = color;
+    d.appendChild(izq); d.appendChild(der);
+    el.appendChild(d);
+  }
+  fila('Ingreso mensual estimado', ing, 'var(--oliva)');
+  fila('Gastos fijos promedio', fijos, 'var(--terracota)');
+  fila('Gastos variables promedio', variables, 'var(--terracota)');
+  fila('Fondo de seguridad sugerido (6 meses de fijos)', fijos * 6, 'var(--amarillo)', true);
+  var pie = document.createElement('p');
+  pie.className = 'hint';
+  pie.textContent = 'Promedio de ' + (n === 1 ? nombreMes(hasta) : n + ' meses (' + nombreMes(desde) + ' a ' + nombreMes(hasta) + ')') +
+    (n < 6 ? '. El curso recomienda promediar 6: con los meses que pasen se va a ir afinando solo.' : '.');
+  el.appendChild(pie);
+}
+
 function sumarPor(filas, campo, valor) {
   var acc = {};
   filas.forEach(function (f) {
@@ -1447,6 +1508,7 @@ function sumarPor(filas, campo, valor) {
 }
 function pintarAnalisis() {
   pintarSelectorMeses();
+  pintarProyeccion();
   var mes = $('mesSelector').value;
   var gastosMes = conPendientes('GASTOS').filter(function (f) { return claveDePeriodo(f) === mes; });
   var ingresosMes = conPendientes('INGRESOS').filter(function (f) { return claveDePeriodo(f) === mes; });
