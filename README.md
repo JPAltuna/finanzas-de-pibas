@@ -86,6 +86,17 @@ a fijos, hasta 30% a variables y al menos 20% para ahorrar. Y la tarjeta
 "Presupuesto y fondo de seguridad" promedia tus últimos 6 meses para
 proyectar (ingreso estimado + fondo de seguridad de 6 meses de fijos).
 
+## Objetivos financieros
+
+En Análisis está la tarjeta **Objetivos**: ahorro con nombre y meta,
+en pesos o dólares, clasificado en corto plazo (1-2 años, ej. vacaciones),
+mediano (ej. un terreno) y largo (ej. jubilación). Le registrás **aportes**
+cuando apartás plata y ves la barra de progreso; con tu ritmo de ahorro
+promedio, la app te estima cuándo llegás. El **fondo de seguridad**
+(6 meses de gastos fijos) te lo sugiere como primer objetivo con la meta
+ya calculada. Y la regla 50-30-20 pasa a medir el ahorro real: lo que
+efectivamente aportaste a tus objetivos en el mes.
+
 ## ¿Y si cargo algo sin internet?
 
 Queda guardado en el teléfono y se sube solo cuando vuelve la conexión

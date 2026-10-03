@@ -24,6 +24,7 @@
     --terracota: #f0b9a4;    /* gastos */
     --ocre: #ecd3a0;         /* dólares */
     --amarillo: #f6e7a9;     /* balance y diferenciaciones */
+    --mostaza: #c89a2e;      /* objetivos y su pestaña */
     --sombra: 0 1px 6px rgba(40, 50, 46, .20);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -159,6 +160,9 @@
   }
   nav button .ico { display: block; margin: 0 auto 3px; }
   nav button .ico svg { width: 22px; height: 22px; display: block; margin: 0 auto; fill: currentColor; }
+  /* La pestaña de Análisis es la destacada: más alta y con el símbolo mostaza */
+  nav button[data-p="analisis"] .ico { color: var(--mostaza); }
+  nav button[data-p="analisis"] .ico svg { width: 28px; height: 28px; margin-top: -6px; }
   nav button.activo { color: var(--tinta); border-top-color: var(--kraft); }
   .pantalla { display: none; }
   .pantalla.activa { display: block; }
@@ -221,6 +225,8 @@
   .presRow { display: grid; grid-template-columns: 1fr 150px; gap: 10px; align-items: center; margin-top: 8px; font-size: .92rem; }
   .presRow input { padding: 9px 10px; text-align: right; }
   .regla { margin-top: 12px; border-top: 1px dashed var(--borde); padding-top: 8px; }
+  #formObjetivo { margin-top: 4px; }
+  #sugFondo .btn { margin-top: 10px; }
   .reglaRow { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; font-size: .86rem; }
 </style>
 </head>
@@ -479,6 +485,32 @@
       <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Promedios de tus últimos meses completos (el mes en curso no cuenta porque todavía no terminó). Son los números para proyectar tu presupuesto.</p>
       <div id="anProyeccion" class="vacio">Todavía no hay meses completos para promediar.</div>
     </div>
+    <div class="card">
+      <h2>Objetivos</h2>
+      <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Ahorro con nombre: primero el fondo de seguridad, después corto, mediano y largo plazo. Tocá un objetivo para registrarle aportes.</p>
+      <div id="anObjetivos" class="vacio">Todavía no creaste objetivos.</div>
+      <div id="sugFondo" hidden></div>
+      <span class="verMas" id="verNuevoObj">▸ Nuevo objetivo</span>
+      <div id="formObjetivo" hidden>
+        <label for="objNombre">Nombre</label>
+        <input id="objNombre" type="text" placeholder="Ej: Vacaciones, Terreno, Jubilación…" autocomplete="off">
+        <label>Plazo</label>
+        <div class="toggle" id="objPlazo" style="grid-template-columns:repeat(3,1fr);">
+          <button type="button" data-v="Corto" class="activo">Corto</button>
+          <button type="button" data-v="Mediano">Mediano</button>
+          <button type="button" data-v="Largo">Largo</button>
+        </div>
+        <p class="hint">Corto: 1-2 años (vacaciones). Mediano: unos años (terreno). Largo: décadas (jubilación).</p>
+        <label>Moneda de la meta</label>
+        <div class="toggle" id="objMoneda">
+          <button type="button" data-v="ARS" class="activo">$ Pesos</button>
+          <button type="button" data-v="USD">US$ Dólar</button>
+        </div>
+        <label for="objMeta" id="objMetaLabel">Meta ($)</label>
+        <input id="objMeta" type="number" inputmode="decimal" min="0" step="0.01" placeholder="¿Cuánto hay que juntar?">
+        <button class="btn" id="btnObjetivo">Crear objetivo</button>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -520,6 +552,9 @@ var estado = {
 };
 if (!estado.datos.deudas) estado.datos.deudas = []; // caché de versiones anteriores
 if (!estado.datos.presupuesto) estado.datos.presupuesto = [];
+if (!estado.datos.objetivos) estado.datos.objetivos = [];
+estado.plazoObjetivo = 'Corto';
+estado.monedaObjetivo = 'ARS';
 
 var $ = function (id) { return document.getElementById(id); };
 var fmtARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
@@ -549,7 +584,10 @@ var ESQUEMAS = {
   // (TIPO Pago, con DEUDA_ID apuntando a la deuda que achican)
   DEUDAS: ['ID', 'FECHA', 'TIPO', 'CON', 'MONTO', 'NOTA', 'REGISTRADO', 'DEUDA_ID'],
   // Presupuesto mensual por categoría: vale la fila más nueva de cada una
-  PRESUPUESTO: ['ID', 'CATEGORIA', 'MONTO', 'REGISTRADO']
+  PRESUPUESTO: ['ID', 'CATEGORIA', 'MONTO', 'REGISTRADO'],
+  // En OBJETIVOS conviven los objetivos (NOMBRE/PLAZO/META) y sus aportes
+  // (MONTO + OBJETIVO_ID apuntando al objetivo que alimentan)
+  OBJETIVOS: ['ID', 'FECHA', 'NOMBRE', 'PLAZO', 'MONEDA', 'META', 'MONTO', 'REGISTRADO', 'OBJETIVO_ID']
 };
 var CONFIG_COLS = {
   categoriasGastos: 'CATEGORIAS GASTOS',
@@ -581,7 +619,7 @@ function objDeDatos(datos) {
   return o;
 }
 function claveDeHoja(hoja) {
-  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : hoja === 'PRESUPUESTO' ? 'presupuesto' : '';
+  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : hoja === 'PRESUPUESTO' ? 'presupuesto' : hoja === 'OBJETIVOS' ? 'objetivos' : '';
 }
 // Registros de la planilla + los que todavía están por subir (marcados _pendiente)
 function conPendientes(hoja) {
@@ -712,7 +750,7 @@ function sincronizar(conAviso) {
   if (!estado.url || estado.sincronizando) return Promise.resolve();
   estado.sincronizando = true;
   $('btnSync').textContent = '…';
-  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,PRESUPUESTO,CONFIG' }).then(function (r) {
+  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,PRESUPUESTO,OBJETIVOS,CONFIG' }).then(function (r) {
     if (!r || !r.ok) {
       var msj = (r && r.error) ? r.error : 'la planilla respondió algo raro';
       if (/desconocida/i.test(msj)) msj = 'tu conector es de una versión vieja. Pegá el código nuevo en Apps Script y hacé "Nueva versión" (pasos en el README).';
@@ -724,7 +762,8 @@ function sincronizar(conAviso) {
       ingresos: filasAObjetos(h.INGRESOS),
       inversiones: filasAObjetos(h.INVERSIONES),
       deudas: filasAObjetos(h.DEUDAS),
-      presupuesto: filasAObjetos(h.PRESUPUESTO)
+      presupuesto: filasAObjetos(h.PRESUPUESTO),
+      objetivos: filasAObjetos(h.OBJETIVOS)
     };
     lsSet(LS.datos, estado.datos);
     var cfg = configDeCruda(h.CONFIG);
@@ -1168,9 +1207,12 @@ function descPendiente(r) {
   var d = r.datos || {};
   var que = r.hoja === 'GASTOS' ? 'Gasto' : r.hoja === 'INGRESOS' ? 'Ingreso'
     : r.hoja === 'DEUDAS' ? (d.TIPO === 'Pago' ? 'Pago de deuda' : 'Deuda')
-    : r.hoja === 'PRESUPUESTO' ? 'Presupuesto' : 'Inversión';
-  var detalle = d.CATEGORIA || d.PLATAFORMA || d.CON || '';
-  var monto = r.hoja === 'INVERSIONES' ? fmtUSD.format(parseFloat(d.MONTO_USD) || 0) : fmtARS.format(parseFloat(d.MONTO) || 0);
+    : r.hoja === 'PRESUPUESTO' ? 'Presupuesto'
+    : r.hoja === 'OBJETIVOS' ? (d.OBJETIVO_ID ? 'Aporte a objetivo' : 'Objetivo') : 'Inversión';
+  var detalle = d.CATEGORIA || d.PLATAFORMA || d.CON || d.NOMBRE || '';
+  var fmtDesc = (r.hoja === 'OBJETIVOS' && d.MONEDA === 'USD') ? fmtUSD : fmtARS;
+  var monto = r.hoja === 'INVERSIONES' ? fmtUSD.format(parseFloat(d.MONTO_USD) || 0)
+    : fmtDesc.format(parseFloat(d.MONTO || d.META) || 0);
   return que + (d.FECHA ? ' · ' + fmtFecha(d.FECHA) : '') + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
 }
 function pintarPendientes() {
@@ -1522,7 +1564,7 @@ function barrasDesplegables(el, pares, formato, filasPorClave, presup) {
 
 // Regla 50-30-20 del curso: de los ingresos, hasta 50% a fijos, hasta 30%
 // a variables y al menos 20% queda para ahorrar. Va al pie de la torta.
-function regla503020(el, fijos, variables, ingresos) {
+function regla503020(el, fijos, variables, ingresos, aportes) {
   if (!(ingresos > 0) || el.className === 'vacio') return;
   var cont = document.createElement('div');
   cont.className = 'regla';
@@ -1530,11 +1572,15 @@ function regla503020(el, fijos, variables, ingresos) {
   tit.className = 'hint';
   tit.textContent = 'Regla 50-30-20 (sobre tus ingresos del período):';
   cont.appendChild(tit);
-  var ahorro = ingresos - fijos - variables;
+  // Si hubo aportes a objetivos, el 20% se mide con ahorro REAL;
+  // si no, se muestra lo que quedó disponible para ahorrar.
+  var filaAhorro = aportes > 0
+    ? ['Ahorrado en objetivos', aportes / ingresos * 100, 'al menos 20%', aportes / ingresos >= 0.2]
+    : ['Queda para ahorrar', (ingresos - fijos - variables) / ingresos * 100, 'al menos 20%', (ingresos - fijos - variables) / ingresos >= 0.2];
   [
     ['Fijos', fijos / ingresos * 100, 'hasta 50%', fijos / ingresos <= 0.5],
     ['Variables', variables / ingresos * 100, 'hasta 30%', variables / ingresos <= 0.3],
-    ['Queda para ahorrar', ahorro / ingresos * 100, 'al menos 20%', ahorro / ingresos >= 0.2]
+    filaAhorro
   ].forEach(function (r) {
     var d = document.createElement('div');
     d.className = 'reglaRow';
@@ -1552,7 +1598,7 @@ function regla503020(el, fijos, variables, ingresos) {
 // ═══ Proyección: promedios de los últimos 6 meses completos ═══
 // (consejo del curso: con ingresos variables, promediar los últimos 6 meses
 // para proyectar; y tener un fondo de seguridad de 6 meses de gastos fijos)
-function pintarProyeccion() {
+function promediosHistoricos() {
   var mesActual = hoyISO().slice(0, 7);
   var porMes = {};
   function mesDato(f) {
@@ -1569,17 +1615,22 @@ function pintarProyeccion() {
     else d.variables += parseFloat(f.monto) || 0;
   });
   var meses = Object.keys(porMes).sort().reverse().slice(0, 6);
+  if (!meses.length) return null;
+  var n = meses.length;
+  var ing = 0, fijos = 0, variables = 0;
+  meses.forEach(function (m) { ing += porMes[m].ing; fijos += porMes[m].fijos; variables += porMes[m].variables; });
+  return { n: n, ing: ing / n, fijos: fijos / n, variables: variables / n, desde: meses[meses.length - 1], hasta: meses[0] };
+}
+function pintarProyeccion() {
+  var p = promediosHistoricos();
   var el = $('anProyeccion');
-  if (!meses.length) {
+  if (!p) {
     el.className = 'vacio';
     el.textContent = 'Todavía no hay meses completos para promediar. Cuando termine tu primer mes, acá aparecen tus promedios.';
     return;
   }
-  var n = meses.length;
-  var ing = 0, fijos = 0, variables = 0;
-  meses.forEach(function (m) { ing += porMes[m].ing; fijos += porMes[m].fijos; variables += porMes[m].variables; });
-  ing /= n; fijos /= n; variables /= n;
-  var desde = meses[meses.length - 1], hasta = meses[0];
+  var n = p.n, ing = p.ing, fijos = p.fijos, variables = p.variables;
+  var desde = p.desde, hasta = p.hasta;
   el.className = ''; el.innerHTML = '';
   function fila(texto, valor, color, grande) {
     var d = document.createElement('div');
@@ -1601,6 +1652,175 @@ function pintarProyeccion() {
   el.appendChild(pie);
 }
 
+// ═══ Objetivos financieros: ahorro con nombre, meta y aportes ═══
+var objetivoAbierto = null;
+document.querySelectorAll('#objPlazo button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    estado.plazoObjetivo = b.dataset.v;
+    document.querySelectorAll('#objPlazo button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+  });
+});
+document.querySelectorAll('#objMoneda button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    estado.monedaObjetivo = b.dataset.v;
+    document.querySelectorAll('#objMoneda button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+    $('objMetaLabel').textContent = b.dataset.v === 'USD' ? 'Meta (US$)' : 'Meta ($)';
+  });
+});
+$('verNuevoObj').addEventListener('click', function () {
+  var f = $('formObjetivo');
+  f.hidden = !f.hidden;
+  $('verNuevoObj').textContent = (f.hidden ? '▸' : '▾') + ' Nuevo objetivo';
+});
+function crearObjetivo(nombre, plazo, moneda, meta) {
+  var idO = nuevoId();
+  guardar({
+    accion: 'fila', hoja: 'OBJETIVOS', id: idO, esquema: ESQUEMAS.OBJETIVOS,
+    datos: {
+      ID: idO, FECHA: hoyISO(), NOMBRE: nombre, PLAZO: plazo, MONEDA: moneda,
+      META: meta, MONTO: '', REGISTRADO: ahora(), OBJETIVO_ID: ''
+    }
+  }, null, function () {});
+}
+$('btnObjetivo').addEventListener('click', function () {
+  var nombre = $('objNombre').value.trim();
+  var meta = parseFloat($('objMeta').value);
+  if (!nombre) return aviso('error', 'Ponele un nombre al objetivo.');
+  if (!(meta > 0)) return aviso('error', 'Poné cuánto hay que juntar.');
+  crearObjetivo(nombre, estado.plazoObjetivo, estado.monedaObjetivo, meta);
+  $('objNombre').value = ''; $('objMeta').value = '';
+  $('formObjetivo').hidden = true;
+  $('verNuevoObj').textContent = '▸ Nuevo objetivo';
+});
+function guardarAporte(obj, monto) {
+  var idA = nuevoId();
+  guardar({
+    accion: 'fila', hoja: 'OBJETIVOS', id: idA, esquema: ESQUEMAS.OBJETIVOS,
+    datos: {
+      ID: idA, FECHA: hoyISO(), NOMBRE: obj.nombre, PLAZO: '', MONEDA: obj.moneda || 'ARS',
+      META: '', MONTO: monto, REGISTRADO: ahora(), OBJETIVO_ID: obj.id
+    }
+  }, null, function () {});
+}
+function pintarObjetivos() {
+  var filas = conPendientes('OBJETIVOS');
+  var aportesPor = {};
+  filas.forEach(function (f) {
+    if (!f.objetivo_id) return;
+    (aportesPor[f.objetivo_id] = aportesPor[f.objetivo_id] || []).push(f);
+  });
+  var objetivos = filas.filter(function (f) { return !f.objetivo_id && f.nombre; });
+  var p = promediosHistoricos();
+  var ritmo = p ? p.ing - p.fijos - p.variables : 0;
+
+  var el = $('anObjetivos');
+  if (!objetivos.length) {
+    el.className = 'vacio';
+    el.textContent = 'Todavía no creaste objetivos.';
+  } else {
+    el.className = ''; el.innerHTML = '';
+    var PLAZOS = [['Corto', 'Corto plazo (1-2 años)'], ['Mediano', 'Mediano plazo'], ['Largo', 'Largo plazo']];
+    PLAZOS.forEach(function (pl) {
+      var delPlazo = objetivos.filter(function (o) { return String(o.plazo) === pl[0]; });
+      if (!delPlazo.length) return;
+      var tit = document.createElement('p');
+      tit.className = 'hint';
+      tit.style.marginTop = '10px';
+      tit.textContent = pl[1];
+      el.appendChild(tit);
+      delPlazo.forEach(function (o) {
+        var esUsd = String(o.moneda) === 'USD';
+        var fmt = esUsd ? fmtUSD : fmtARS;
+        var meta = parseFloat(o.meta) || 0;
+        var juntado = (aportesPor[o.id] || []).reduce(function (s, a) { return s + (parseFloat(a.monto) || 0); }, 0);
+        var falta = Math.max(0, meta - juntado);
+        var cumplido = meta > 0 && juntado >= meta;
+
+        var caja = document.createElement('div'); caja.className = 'deuda';
+        var cab = document.createElement('div'); cab.className = 'cabecera';
+        var det = document.createElement('div'); det.className = 'det';
+        var b = document.createElement('b');
+        b.textContent = (cumplido ? '★ ' : '') + o.nombre;
+        var s = document.createElement('small');
+        s.textContent = cumplido
+          ? '¡Cumplido! Juntaste ' + fmt.format(juntado)
+          : 'juntado ' + fmt.format(juntado) + ' de ' + fmt.format(meta) + (meta > 0 ? ' (' + Math.round(juntado / meta * 100) + '%)' : '');
+        if (o._pendiente) {
+          var tag = document.createElement('span'); tag.className = 'tagPend'; tag.textContent = ' · subiendo ↑';
+          s.appendChild(tag);
+        }
+        det.appendChild(b); det.appendChild(s);
+        var plata = document.createElement('div');
+        plata.className = 'plata';
+        plata.style.color = cumplido ? 'var(--oliva)' : 'var(--amarillo)';
+        plata.textContent = cumplido ? '✓' : fmt.format(falta);
+        cab.appendChild(det); cab.appendChild(plata);
+        caja.appendChild(cab);
+        var pista = document.createElement('div'); pista.className = 'pista';
+        var rel = document.createElement('div'); rel.className = 'relleno';
+        rel.style.width = Math.max(2, Math.min(100, meta > 0 ? juntado / meta * 100 : 0)) + '%';
+        rel.style.background = 'var(--mostaza)';
+        pista.appendChild(rel);
+        caja.appendChild(pista);
+
+        var detalle = document.createElement('div');
+        detalle.className = 'detalle' + (objetivoAbierto === o.id ? ' abierto' : '');
+        if (!cumplido && !esUsd && ritmo > 0 && falta > 0) {
+          var proy = document.createElement('p');
+          proy.className = 'hint';
+          var mesesFaltan = Math.ceil(falta / ritmo);
+          var d = new Date(); d.setMonth(d.getMonth() + mesesFaltan);
+          proy.textContent = 'A tu ritmo de ahorro (' + fmtARS.format(ritmo) + '/mes) llegás en ~' + mesesFaltan +
+            (mesesFaltan === 1 ? ' mes' : ' meses') + ' (' + MESES[d.getMonth()] + ' ' + d.getFullYear() + ').';
+          detalle.appendChild(proy);
+        }
+        (aportesPor[o.id] || []).slice().sort(ordenarPorFecha).forEach(function (a) {
+          var m = document.createElement('div'); m.className = 'mov';
+          var izq = document.createElement('span');
+          izq.textContent = fmtFecha(a.fecha) + ' · aporte' + (a._pendiente ? ' (subiendo ↑)' : '');
+          izq.style.fontSize = '.85rem';
+          var der = document.createElement('b'); der.textContent = fmt.format(a.monto || 0);
+          m.appendChild(izq); m.appendChild(der);
+          detalle.appendChild(m);
+        });
+        var form = document.createElement('div'); form.className = 'pagoForm';
+        var inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.step = '0.01'; inp.inputMode = 'decimal';
+        inp.placeholder = esUsd ? '¿Cuánto apartaste (US$)?' : '¿Cuánto apartaste?';
+        var btnA = document.createElement('button'); btnA.type = 'button'; btnA.textContent = '＋ Aporte';
+        btnA.addEventListener('click', function () {
+          var m = parseFloat(inp.value);
+          if (!(m > 0)) return aviso('error', 'Poné el monto del aporte.');
+          guardarAporte(o, m);
+        });
+        form.appendChild(inp); form.appendChild(btnA);
+        detalle.appendChild(form);
+        caja.appendChild(detalle);
+        cab.addEventListener('click', function () {
+          objetivoAbierto = detalle.classList.toggle('abierto') ? o.id : null;
+        });
+        el.appendChild(caja);
+      });
+    });
+  }
+
+  // Sugerencia: el fondo de seguridad como primer objetivo, con la meta ya calculada
+  var sug = $('sugFondo');
+  var hayFondo = objetivos.some(function (o) { return /fondo/i.test(String(o.nombre)); });
+  if (!hayFondo && p && p.fijos > 0) {
+    var metaFondo = Math.round(p.fijos * 6);
+    sug.hidden = false;
+    sug.innerHTML = '';
+    var btnF = document.createElement('button');
+    btnF.type = 'button'; btnF.className = 'btn secundario';
+    btnF.textContent = 'Crear mi fondo de seguridad (meta ' + fmtARS.format(metaFondo) + ')';
+    btnF.addEventListener('click', function () { crearObjetivo('Fondo de seguridad', 'Corto', 'ARS', metaFondo); });
+    sug.appendChild(btnF);
+  } else {
+    sug.hidden = true; sug.innerHTML = '';
+  }
+}
+
 function sumarPor(filas, campo, valor) {
   var acc = {};
   filas.forEach(function (f) {
@@ -1612,6 +1832,7 @@ function sumarPor(filas, campo, valor) {
 function pintarAnalisis() {
   pintarSelectorMeses();
   pintarProyeccion();
+  pintarObjetivos();
   var mes = $('mesSelector').value;
   var gastosMes = conPendientes('GASTOS').filter(function (f) { return claveDePeriodo(f) === mes; });
   var ingresosMes = conPendientes('INGRESOS').filter(function (f) { return claveDePeriodo(f) === mes; });
@@ -1635,7 +1856,17 @@ function pintarAnalisis() {
   tortaFijosVar($('anFijosVar'), fv.Fijos, fv.Variables,
     gastosMes.filter(function (f) { return String(f.tipo) === 'Fijo'; }),
     estado.periodo === 'mes');
-  regla503020($('anFijosVar'), fv.Fijos, fv.Variables, totI);
+  // Aportes a objetivos del período (solo los en pesos, para comparar con ingresos)
+  var monedaPorObjetivo = {};
+  conPendientes('OBJETIVOS').forEach(function (f) {
+    if (!f.objetivo_id && f.nombre) monedaPorObjetivo[f.id] = String(f.moneda || 'ARS');
+  });
+  var aportesMes = conPendientes('OBJETIVOS').reduce(function (s, f) {
+    if (!f.objetivo_id || claveDePeriodo(f) !== mes) return s;
+    if (monedaPorObjetivo[f.objetivo_id] === 'USD') return s;
+    return s + (parseFloat(f.monto) || 0);
+  }, 0);
+  regla503020($('anFijosVar'), fv.Fijos, fv.Variables, totI, aportesMes);
 
   var porCat = {};
   gastosMes.forEach(function (f) {
