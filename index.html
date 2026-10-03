@@ -183,7 +183,13 @@
     font-size: .88rem; font-weight: 600;
   }
   #pendientesAviso button { margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px 3px 10px 3px; border: none; background: var(--carbon); color: #f4f1e6; font-weight: 800; cursor: pointer; }
-  #pendientesAviso .pendItem { font-weight: 500; font-size: .84rem; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(244, 240, 224, .25); }
+  #pendientesAviso .pendItem { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 500; font-size: .84rem; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(244, 240, 224, .25); }
+  .btnX {
+    background: none; border: none; color: var(--suave); opacity: .7;
+    font-size: .95rem; cursor: pointer; padding: 4px 7px; flex: none;
+    font-family: inherit; border-radius: 8px;
+  }
+  .btnX:active { opacity: 1; color: var(--terracota); }
   .tagPend { color: var(--amarillo); font-weight: 700; }
   .vacio { text-align: center; color: var(--suave); padding: 18px 0; font-size: .9rem; font-style: italic; }
   .hint { font-size: .78rem; color: var(--suave); margin-top: 5px; line-height: 1.4; }
@@ -621,13 +627,18 @@ function objDeDatos(datos) {
 function claveDeHoja(hoja) {
   return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : hoja === 'PRESUPUESTO' ? 'presupuesto' : hoja === 'OBJETIVOS' ? 'objetivos' : '';
 }
-// Registros de la planilla + los que todavía están por subir (marcados _pendiente)
+// Registros de la planilla + los que todavía están por subir (marcados _pendiente).
+// Los que tienen un borrado pendiente desaparecen de la vista al instante.
 function conPendientes(hoja) {
-  var base = (estado.datos[claveDeHoja(hoja)] || []).slice();
+  var porBorrar = {};
+  estado.pendientes.forEach(function (r) {
+    if (r.hoja === hoja && r.accion === 'fila_borrar') porBorrar[String(r.id)] = true;
+  });
+  var base = (estado.datos[claveDeHoja(hoja)] || []).filter(function (f) { return !porBorrar[String(f.id)]; });
   var ids = {};
   base.forEach(function (f) { ids[String(f.id)] = true; });
   estado.pendientes.forEach(function (r) {
-    if (r.hoja !== hoja || ids[String(r.id)]) return;
+    if (r.hoja !== hoja || r.accion !== 'fila' || ids[String(r.id)] || porBorrar[String(r.id)]) return;
     var o = objDeDatos(r.datos);
     o._pendiente = true;
     base.push(o);
@@ -675,12 +686,15 @@ function jsonp(params, timeoutMs) {
   });
 }
 // Escrituras: POST no-cors (no podemos leer la respuesta) + JSONP de confirmación por id.
+// Para un alta se confirma que el id EXISTE; para un borrado, que YA NO existe.
 function enviarRegistro(registro) {
   return fetch(estado.url, { method: 'POST', mode: 'no-cors', body: JSON.stringify(registro) })
     .then(function () { return new Promise(function (r) { setTimeout(r, 1800); }); })
     .then(function () { return jsonp({ accion: 'confirmar', id: registro.id, hoja: registro.hoja }, 15000); })
     .then(function (resp) {
-      if (!resp || !resp.ok || !resp.existe) throw new Error('El registro no llegó a la planilla');
+      if (!resp || !resp.ok) throw new Error('La planilla respondió algo raro');
+      var esBorrado = registro.accion === 'fila_borrar';
+      if (esBorrado ? resp.existe : !resp.existe) throw new Error('El cambio no llegó a la planilla');
       return true;
     });
 }
@@ -968,6 +982,23 @@ function guardar(registro, btn, alTerminar) {
   aviso('ok', 'Anotado. Se está subiendo a tu planilla…');
   procesarCola();
 }
+// Borra un registro de la planilla (desaparece al toque de la vista; el
+// borrado real viaja por la misma cola). Si el registro todavía estaba
+// esperando para subir, alcanza con sacarlo de la cola.
+function borrarRegistro(hoja, fila) {
+  var id = String(fila.id);
+  var estabaEnCola = estado.pendientes.some(function (r) { return r.accion === 'fila' && String(r.id) === id; });
+  estado.pendientes = estado.pendientes.filter(function (r) { return !(r.accion === 'fila' && String(r.id) === id); });
+  if (!estabaEnCola) {
+    var datos = {};
+    Object.keys(fila).forEach(function (k) { if (k[0] !== '_') datos[k.toUpperCase()] = fila[k]; });
+    estado.pendientes.push({ accion: 'fila_borrar', hoja: hoja, id: id, datos: datos });
+  }
+  lsSet(LS.pendientes, estado.pendientes);
+  pintarTodo();
+  aviso('ok', estabaEnCola ? 'Listo, lo saqué antes de que subiera.' : 'Borrado. Se está sacando de tu planilla…');
+  procesarCola();
+}
 
 document.querySelectorAll('#gTipo button').forEach(function (b) {
   b.addEventListener('click', function () {
@@ -1145,6 +1176,17 @@ function pintarDeudas() {
       plata.className = 'plata ' + (esMeDeben ? 'ingreso' : 'gasto');
       plata.textContent = fmtARS.format(d.saldo);
       cab.appendChild(det); cab.appendChild(plata);
+      var xD = document.createElement('button');
+      xD.type = 'button'; xD.className = 'btnX'; xD.textContent = '✕';
+      xD.title = 'Borrar esta deuda';
+      xD.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var pagos = pagosPor[f.id] || [];
+        if (!confirm('¿Borrar la deuda "' + (f.con || '') + '"' + (pagos.length ? ' y sus ' + pagos.length + ' pago(s)' : '') + ' de tu planilla?')) return;
+        pagos.forEach(function (p) { borrarRegistro('DEUDAS', p); });
+        borrarRegistro('DEUDAS', f);
+      });
+      cab.appendChild(xD);
       caja.appendChild(cab);
       if (d.pagado > 0) {
         var pista = document.createElement('div'); pista.className = 'pista';
@@ -1162,6 +1204,14 @@ function pintarDeudas() {
         izq.style.fontSize = '.85rem';
         var der = document.createElement('b'); der.textContent = fmtARS.format(p.monto || 0);
         m.appendChild(izq); m.appendChild(der);
+        var xP = document.createElement('button');
+        xP.type = 'button'; xP.className = 'btnX'; xP.textContent = '✕';
+        xP.title = 'Borrar este pago';
+        xP.addEventListener('click', function () {
+          if (!confirm('¿Borrar este pago de ' + fmtARS.format(p.monto || 0) + '? El saldo de la deuda vuelve a subir.')) return;
+          borrarRegistro('DEUDAS', p);
+        });
+        m.appendChild(xP);
         detalle.appendChild(m);
       });
       var form = document.createElement('div'); form.className = 'pagoForm';
@@ -1198,6 +1248,15 @@ function pintarDeudas() {
     var plata = document.createElement('div'); plata.className = 'plata';
     plata.textContent = fmtARS.format(f.monto || 0);
     div.appendChild(det); div.appendChild(plata);
+    var xS = document.createElement('button');
+    xS.type = 'button'; xS.className = 'btnX'; xS.textContent = '✕';
+    xS.title = 'Borrar esta deuda saldada';
+    xS.addEventListener('click', function () {
+      if (!confirm('¿Borrar la deuda saldada "' + (f.con || '') + '" y sus pagos de tu planilla?')) return;
+      (pagosPor[f.id] || []).forEach(function (p) { borrarRegistro('DEUDAS', p); });
+      borrarRegistro('DEUDAS', f);
+    });
+    div.appendChild(xS);
     elS.appendChild(div);
   });
 }
@@ -1213,6 +1272,7 @@ function descPendiente(r) {
   var fmtDesc = (r.hoja === 'OBJETIVOS' && d.MONEDA === 'USD') ? fmtUSD : fmtARS;
   var monto = r.hoja === 'INVERSIONES' ? fmtUSD.format(parseFloat(d.MONTO_USD) || 0)
     : fmtDesc.format(parseFloat(d.MONTO || d.META) || 0);
+  if (r.accion === 'fila_borrar') que = 'Borrar ' + que.toLowerCase();
   return que + (d.FECHA ? ' · ' + fmtFecha(d.FECHA) : '') + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
 }
 function pintarPendientes() {
@@ -1226,7 +1286,21 @@ function pintarPendientes() {
   estado.pendientes.forEach(function (r) {
     var item = document.createElement('div');
     item.className = 'pendItem';
-    item.textContent = descPendiente(r);
+    var txt = document.createElement('span');
+    txt.textContent = descPendiente(r);
+    item.appendChild(txt);
+    if (!enviandoCola) {
+      var x = document.createElement('button');
+      x.type = 'button'; x.className = 'btnX'; x.textContent = '✕';
+      x.title = 'Descartar (no se sube a la planilla)';
+      x.addEventListener('click', function () {
+        if (!confirm('¿Descartar esto? No se va a subir a la planilla:\n' + descPendiente(r))) return;
+        estado.pendientes = estado.pendientes.filter(function (p) { return p !== r; });
+        lsSet(LS.pendientes, estado.pendientes);
+        pintarTodo();
+      });
+      item.appendChild(x);
+    }
     el.appendChild(item);
   });
   if (!enviandoCola) {
@@ -1249,9 +1323,12 @@ function procesarCola() {
   enviarRegistro(reg).then(function () {
     estado.pendientes = estado.pendientes.filter(function (r) { return r.id !== reg.id; });
     lsSet(LS.pendientes, estado.pendientes);
-    // Pasa de "pendiente" a dato confirmado sin esperar la próxima sincronización.
+    // Refleja el cambio confirmado sin esperar la próxima sincronización.
     var k = claveDeHoja(reg.hoja);
-    if (k && !(estado.datos[k] || []).some(function (f) { return String(f.id) === String(reg.id); })) {
+    if (k && reg.accion === 'fila_borrar') {
+      estado.datos[k] = (estado.datos[k] || []).filter(function (f) { return String(f.id) !== String(reg.id); });
+      lsSet(LS.datos, estado.datos);
+    } else if (k && !(estado.datos[k] || []).some(function (f) { return String(f.id) === String(reg.id); })) {
       (estado.datos[k] = estado.datos[k] || []).push(objDeDatos(reg.datos));
       lsSet(LS.datos, estado.datos);
     }
@@ -1354,6 +1431,15 @@ function pintarLista(idEl, filas, tipo, pfx) {
     }
     det.appendChild(b); det.appendChild(s);
     div.appendChild(det); div.appendChild(plata);
+    var hoja = pfx === 'g' ? 'GASTOS' : pfx === 'i' ? 'INGRESOS' : 'INVERSIONES';
+    var x = document.createElement('button');
+    x.type = 'button'; x.className = 'btnX'; x.textContent = '✕';
+    x.title = 'Borrar este registro';
+    x.addEventListener('click', function () {
+      if (!confirm('¿Borrar este registro de tu planilla?\n' + b.textContent + ' · ' + plata.textContent)) return;
+      borrarRegistro(hoja, f);
+    });
+    div.appendChild(x);
     el.appendChild(div);
   });
   if (conFiltro) {
@@ -1755,6 +1841,17 @@ function pintarObjetivos() {
         plata.style.color = cumplido ? 'var(--oliva)' : 'var(--amarillo)';
         plata.textContent = cumplido ? '✓' : fmt.format(falta);
         cab.appendChild(det); cab.appendChild(plata);
+        var xO = document.createElement('button');
+        xO.type = 'button'; xO.className = 'btnX'; xO.textContent = '✕';
+        xO.title = 'Borrar este objetivo';
+        xO.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          var aps = aportesPor[o.id] || [];
+          if (!confirm('¿Borrar el objetivo "' + o.nombre + '"' + (aps.length ? ' y sus ' + aps.length + ' aporte(s)' : '') + ' de tu planilla?')) return;
+          aps.forEach(function (a) { borrarRegistro('OBJETIVOS', a); });
+          borrarRegistro('OBJETIVOS', o);
+        });
+        cab.appendChild(xO);
         caja.appendChild(cab);
         var pista = document.createElement('div'); pista.className = 'pista';
         var rel = document.createElement('div'); rel.className = 'relleno';
@@ -1781,6 +1878,14 @@ function pintarObjetivos() {
           izq.style.fontSize = '.85rem';
           var der = document.createElement('b'); der.textContent = fmt.format(a.monto || 0);
           m.appendChild(izq); m.appendChild(der);
+          var xA = document.createElement('button');
+          xA.type = 'button'; xA.className = 'btnX'; xA.textContent = '✕';
+          xA.title = 'Borrar este aporte';
+          xA.addEventListener('click', function () {
+            if (!confirm('¿Borrar este aporte de ' + fmt.format(a.monto || 0) + '?')) return;
+            borrarRegistro('OBJETIVOS', a);
+          });
+          m.appendChild(xA);
           detalle.appendChild(m);
         });
         var form = document.createElement('div'); form.className = 'pagoForm';
