@@ -384,13 +384,18 @@
         <button type="button" data-v="Compra" class="activo">Compra / aporte</button>
         <button type="button" data-v="Venta">Venta / retiro</button>
       </div>
+      <label>Moneda</label>
+      <div class="toggle" id="vMoneda">
+        <button type="button" data-v="USD" class="activo">US$ Dólar / USDT</button>
+        <button type="button" data-v="ARS">$ Pesos</button>
+      </div>
       <div class="fila2">
         <div>
           <label for="vFecha">Fecha</label>
           <input id="vFecha" type="date">
         </div>
         <div>
-          <label for="vMonto">Monto (USD)</label>
+          <label for="vMonto" id="vMontoLabel">Monto (US$)</label>
           <input id="vMonto" type="number" class="monto-grande" inputmode="decimal" min="0" step="0.01" placeholder="0">
         </div>
       </div>
@@ -405,6 +410,11 @@
       <label for="vNota">Nota (opcional)</label>
       <input id="vNota" type="text" autocomplete="off">
       <button class="btn" id="btnInversion">Guardar inversión</button>
+    </div>
+    <div class="card">
+      <h2>Tus inversiones</h2>
+      <p class="hint" style="margin-bottom:8px;">Cada inversión junta sus compras y ventas. Tocá una para anotarle <b>cuánto vale hoy</b> y ver cómo se fue moviendo.</p>
+      <div id="listaPosiciones" class="vacio">Todavía no hay inversiones cargadas.</div>
     </div>
     <div class="card">
       <h2>Tus movimientos</h2>
@@ -561,6 +571,7 @@ if (!estado.datos.presupuesto) estado.datos.presupuesto = [];
 if (!estado.datos.objetivos) estado.datos.objetivos = [];
 estado.plazoObjetivo = 'Corto';
 estado.monedaObjetivo = 'ARS';
+estado.monedaInversion = 'USD';
 
 var $ = function (id) { return document.getElementById(id); };
 var fmtARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
@@ -585,7 +596,9 @@ function ahora() {
 var ESQUEMAS = {
   GASTOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'TIPO', 'MEDIO', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO_USD', 'COTIZACION'],
   INGRESOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'CUENTA', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO_USD', 'COTIZACION'],
-  INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO'],
+  // MONEDA/MONTO se agregaron después: las filas viejas solo tienen MONTO_USD
+  // (se leen como USD); TIPO puede ser Compra, Venta o Valor (cuánto vale hoy)
+  INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO'],
   // En DEUDAS conviven las deudas (TIPO Debo / Me deben) y sus pagos
   // (TIPO Pago, con DEUDA_ID apuntando a la deuda que achican)
   DEUDAS: ['ID', 'FECHA', 'TIPO', 'CON', 'MONTO', 'NOTA', 'REGISTRADO', 'DEUDA_ID'],
@@ -1082,22 +1095,135 @@ document.querySelectorAll('#vTipo button').forEach(function (b) {
     document.querySelectorAll('#vTipo button').forEach(function (x) { x.classList.toggle('activo', x === b); });
   });
 });
+document.querySelectorAll('#vMoneda button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    estado.monedaInversion = b.dataset.v;
+    document.querySelectorAll('#vMoneda button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+    $('vMontoLabel').textContent = b.dataset.v === 'USD' ? 'Monto (US$)' : 'Monto ($)';
+  });
+});
+// Las filas viejas de inversiones solo tienen MONTO_USD: se leen como USD
+function invValor(f) {
+  var m = (f.monto === '' || f.monto === undefined || f.monto === null) ? f.monto_usd : f.monto;
+  return parseFloat(m) || 0;
+}
+function invMoneda(f) { return String(f.moneda || 'USD'); }
 $('btnInversion').addEventListener('click', function () {
   var monto = parseFloat($('vMonto').value);
   if (!$('vFecha').value) return aviso('error', 'Poné la fecha del movimiento.');
-  if (!(monto > 0)) return aviso('error', 'Poné el monto en dólares.');
-  if (!$('vPlataforma').value.trim()) return aviso('error', 'Poné la plataforma (Binance, Lemon, IOL…).');
+  if (!(monto > 0)) return aviso('error', 'Poné el monto del movimiento.');
+  if (!$('vPlataforma').value.trim()) return aviso('error', 'Poné la plataforma (Binance, Lemon, MP…).');
   var idV = nuevoId();
   guardar({
     accion: 'fila', hoja: 'INVERSIONES', id: idV, esquema: ESQUEMAS.INVERSIONES,
     datos: {
       ID: idV, FECHA: $('vFecha').value, TIPO: estado.tipoInversion,
       PLATAFORMA: $('vPlataforma').value.trim(), ACTIVO: $('vActivo').value.trim(),
-      MONTO_USD: monto, CANTIDAD: parseFloat($('vCantidad').value) || '',
+      MONEDA: estado.monedaInversion, MONTO: monto,
+      MONTO_USD: estado.monedaInversion === 'USD' ? monto : '',
+      CANTIDAD: parseFloat($('vCantidad').value) || '',
       NOTA: $('vNota').value.trim(), REGISTRADO: ahora()
     }
   }, this, function () { $('vMonto').value = ''; $('vCantidad').value = ''; $('vNota').value = ''; });
 });
+// ═══ Posiciones: cada inversión (plataforma + activo) con su valor actual ═══
+var posicionAbierta = null;
+function guardarValor(pos, monto) {
+  var idV = nuevoId();
+  guardar({
+    accion: 'fila', hoja: 'INVERSIONES', id: idV, esquema: ESQUEMAS.INVERSIONES,
+    datos: {
+      ID: idV, FECHA: hoyISO(), TIPO: 'Valor',
+      PLATAFORMA: pos.plataforma, ACTIVO: pos.activo,
+      MONEDA: pos.moneda, MONTO: monto,
+      MONTO_USD: pos.moneda === 'USD' ? monto : '',
+      CANTIDAD: '', NOTA: '', REGISTRADO: ahora()
+    }
+  }, null, function () {});
+}
+function pintarPosiciones() {
+  var filas = conPendientes('INVERSIONES');
+  var pos = {};
+  filas.forEach(function (f) {
+    var key = (String(f.plataforma || '') + '|' + String(f.activo || '') + '|' + invMoneda(f)).toLowerCase();
+    var p = pos[key] = pos[key] || {
+      plataforma: f.plataforma || '', activo: f.activo || '', moneda: invMoneda(f),
+      neto: 0, movs: [], valores: []
+    };
+    if (String(f.tipo) === 'Valor') p.valores.push(f);
+    else {
+      p.movs.push(f);
+      p.neto += String(f.tipo).toLowerCase() === 'venta' ? -invValor(f) : invValor(f);
+    }
+  });
+  var lista = Object.keys(pos).sort().map(function (k) { return pos[k]; });
+  var el = $('listaPosiciones');
+  if (!lista.length) { el.className = 'vacio'; el.textContent = 'Todavía no hay inversiones cargadas.'; return; }
+  el.className = ''; el.innerHTML = '';
+  lista.forEach(function (p) {
+    var fmt = p.moneda === 'USD' ? fmtUSD : fmtARS;
+    var ultimo = p.valores.slice().sort(ordenarPorFecha)[0] || null;
+    var key = (p.plataforma + '|' + p.activo + '|' + p.moneda).toLowerCase();
+
+    var caja = document.createElement('div'); caja.className = 'deuda';
+    var cab = document.createElement('div'); cab.className = 'cabecera';
+    var det = document.createElement('div'); det.className = 'det';
+    var b = document.createElement('b');
+    b.textContent = p.plataforma + (p.activo ? ' · ' + p.activo : '');
+    var s = document.createElement('small');
+    s.textContent = 'invertido ' + fmt.format(p.neto) + (ultimo ? ' · valor al ' + fmtFecha(ultimo.fecha) : '');
+    if (ultimo && p.neto > 0) {
+      var dif = invValor(ultimo) - p.neto;
+      var tag = document.createElement('span');
+      tag.style.color = dif >= 0 ? 'var(--oliva)' : 'var(--terracota)';
+      tag.style.fontWeight = '700';
+      tag.textContent = ' · ' + (dif >= 0 ? '▲ +' : '▼ −') + fmt.format(Math.abs(dif)) + ' (' + (dif >= 0 ? '+' : '−') + Math.abs(Math.round(dif / p.neto * 100)) + '%)';
+      s.appendChild(tag);
+    }
+    det.appendChild(b); det.appendChild(s);
+    var plata = document.createElement('div'); plata.className = 'plata usd';
+    plata.textContent = fmt.format(ultimo ? invValor(ultimo) : p.neto);
+    cab.appendChild(det); cab.appendChild(plata);
+    caja.appendChild(cab);
+
+    var detalle = document.createElement('div');
+    detalle.className = 'detalle' + (posicionAbierta === key ? ' abierto' : '');
+    p.valores.slice().sort(ordenarPorFecha).forEach(function (v) {
+      var m = document.createElement('div'); m.className = 'mov';
+      var izq = document.createElement('span');
+      izq.textContent = fmtFecha(v.fecha) + ' · valía' + (v._pendiente ? ' (subiendo ↑)' : '');
+      izq.style.fontSize = '.85rem';
+      var der = document.createElement('b'); der.textContent = fmt.format(invValor(v));
+      m.appendChild(izq); m.appendChild(der);
+      var xV = document.createElement('button');
+      xV.type = 'button'; xV.className = 'btnX'; xV.textContent = '✕';
+      xV.title = 'Borrar este valor';
+      xV.addEventListener('click', function () {
+        if (!confirm('¿Borrar el valor del ' + fmtFecha(v.fecha) + ' (' + fmt.format(invValor(v)) + ')?')) return;
+        borrarRegistro('INVERSIONES', v);
+      });
+      m.appendChild(xV);
+      detalle.appendChild(m);
+    });
+    var form = document.createElement('div'); form.className = 'pagoForm';
+    var inp = document.createElement('input');
+    inp.type = 'number'; inp.min = '0'; inp.step = '0.01'; inp.inputMode = 'decimal';
+    inp.placeholder = p.moneda === 'USD' ? '¿Cuánto vale hoy (US$)?' : '¿Cuánto vale hoy ($)?';
+    var btnV = document.createElement('button'); btnV.type = 'button'; btnV.textContent = '＋ Valor';
+    btnV.addEventListener('click', function () {
+      var m = parseFloat(inp.value);
+      if (!(m >= 0)) return aviso('error', 'Poné cuánto vale hoy.');
+      guardarValor(p, m);
+    });
+    form.appendChild(inp); form.appendChild(btnV);
+    detalle.appendChild(form);
+    caja.appendChild(detalle);
+    cab.addEventListener('click', function () {
+      posicionAbierta = detalle.classList.toggle('abierto') ? key : null;
+    });
+    el.appendChild(caja);
+  });
+}
 
 // ═══════════════ Deudas ═══════════════
 document.querySelectorAll('#dTipo button').forEach(function (b) {
@@ -1270,7 +1396,8 @@ function descPendiente(r) {
     : r.hoja === 'OBJETIVOS' ? (d.OBJETIVO_ID ? 'Aporte a objetivo' : 'Objetivo') : 'Inversión';
   var detalle = d.CATEGORIA || d.PLATAFORMA || d.CON || d.NOMBRE || '';
   var fmtDesc = (r.hoja === 'OBJETIVOS' && d.MONEDA === 'USD') ? fmtUSD : fmtARS;
-  var monto = r.hoja === 'INVERSIONES' ? fmtUSD.format(parseFloat(d.MONTO_USD) || 0)
+  var monto = r.hoja === 'INVERSIONES'
+    ? (d.MONEDA === 'ARS' ? fmtARS : fmtUSD).format(parseFloat(d.MONTO || d.MONTO_USD) || 0)
     : fmtDesc.format(parseFloat(d.MONTO || d.META) || 0);
   if (r.accion === 'fila_borrar') que = 'Borrar ' + que.toLowerCase();
   return que + (d.FECHA ? ' · ' + fmtFecha(d.FECHA) : '') + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
@@ -1421,7 +1548,8 @@ function pintarLista(idEl, filas, tipo, pfx) {
       b.textContent = (f.plataforma || '') + (f.activo ? ' · ' + f.activo : '');
       s.textContent = fmtFecha(f.fecha) + ' · ' + (f.tipo || 'Compra') + (f.cantidad ? ' · ' + f.cantidad + ' u.' : '');
       plata.className = 'plata usd';
-      plata.textContent = (String(f.tipo).toLowerCase() === 'venta' ? '− ' : '+ ') + fmtUSD.format(f.monto_usd || 0);
+      var fmtInv = invMoneda(f) === 'USD' ? fmtUSD : fmtARS;
+      plata.textContent = (String(f.tipo).toLowerCase() === 'venta' ? '− ' : '+ ') + fmtInv.format(invValor(f));
     }
     if (f._pendiente) {
       var tag = document.createElement('span');
@@ -1443,19 +1571,26 @@ function pintarLista(idEl, filas, tipo, pfx) {
     el.appendChild(div);
   });
   if (conFiltro) {
-    var tot = lista.reduce(function (s, f) {
-      if (tipo === 'inversion') {
-        var m = parseFloat(f.monto_usd) || 0;
-        return s + (String(f.tipo).toLowerCase() === 'venta' ? -m : m);
-      }
-      return s + (parseFloat(f.monto) || 0);
-    }, 0);
+    var txtTot;
+    if (tipo === 'inversion') {
+      var netoPorMoneda = { ARS: 0, USD: 0 };
+      lista.forEach(function (f) {
+        var m = invValor(f);
+        netoPorMoneda[invMoneda(f)] += String(f.tipo).toLowerCase() === 'venta' ? -m : m;
+      });
+      var partes = [];
+      if (netoPorMoneda.USD) partes.push(fmtUSD.format(netoPorMoneda.USD));
+      if (netoPorMoneda.ARS) partes.push(fmtARS.format(netoPorMoneda.ARS));
+      txtTot = partes.join(' · ') || fmtUSD.format(0);
+    } else {
+      txtTot = fmtARS.format(lista.reduce(function (s, f) { return s + (parseFloat(f.monto) || 0); }, 0));
+    }
     var pie = document.createElement('div');
     pie.className = 'totalFiltro';
     var izq = document.createElement('span');
     izq.textContent = lista.length + (lista.length === 1 ? ' movimiento' : ' movimientos');
     var der = document.createElement('b');
-    der.textContent = (tipo === 'inversion' ? fmtUSD : fmtARS).format(tot);
+    der.textContent = txtTot;
     pie.appendChild(izq); pie.appendChild(der);
     el.appendChild(pie);
   }
@@ -1994,31 +2129,49 @@ function pintarAnalisis() {
   var paresCuentas = Object.keys(cuentas).map(function (k) { return [k, cuentas[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
   barras($('anCuentas'), paresCuentas, fmtARS);
 
-  // Inversiones: aporte neto del mes + total histórico por plataforma
+  // Inversiones: aporte neto del mes + total histórico por plataforma,
+  // separando pesos de dólares (las filas de tipo Valor no son movimientos)
   var el = $('anInversiones');
-  var todasInv = estado.datos.inversiones || [];
+  var todasInv = (estado.datos.inversiones || []).filter(function (f) { return String(f.tipo) !== 'Valor'; });
+  var invMesMov = invMes.filter(function (f) { return String(f.tipo) !== 'Valor'; });
   if (!todasInv.length) { el.className = 'vacio'; el.textContent = 'Sin inversiones registradas.'; }
   else {
-    function neta(filas) {
+    function neta(filas, moneda) {
       return filas.reduce(function (s, f) {
-        var m = parseFloat(f.monto_usd) || 0;
+        if (invMoneda(f) !== moneda) return s;
+        var m = invValor(f);
         return s + (String(f.tipo).toLowerCase() === 'venta' ? -m : m);
       }, 0);
+    }
+    function textoNeto(filas) {
+      var partes = [];
+      var usd = neta(filas, 'USD'), ars = neta(filas, 'ARS');
+      if (usd) partes.push(fmtUSD.format(usd));
+      if (ars) partes.push(fmtARS.format(ars));
+      return partes.join(' · ') || fmtUSD.format(0);
     }
     el.className = ''; el.innerHTML = '';
     var resumen = document.createElement('p');
     resumen.style.cssText = 'font-size:.92rem;margin-bottom:10px;';
-    resumen.innerHTML = 'Este mes: <b style="color:var(--ocre)">' + fmtUSD.format(neta(invMes)) + '</b> · Total invertido: <b style="color:var(--ocre)">' + fmtUSD.format(neta(todasInv)) + '</b>';
+    resumen.innerHTML = 'Este período: <b style="color:var(--ocre)">' + textoNeto(invMesMov) + '</b><br>Total invertido: <b style="color:var(--ocre)">' + textoNeto(todasInv) + '</b>';
     el.appendChild(resumen);
-    var porPlat = {};
-    todasInv.forEach(function (f) {
-      var k = f.plataforma || 'Sin dato';
-      var m = parseFloat(f.monto_usd) || 0;
-      porPlat[k] = (porPlat[k] || 0) + (String(f.tipo).toLowerCase() === 'venta' ? -m : m);
+    ['USD', 'ARS'].forEach(function (mon) {
+      var deMon = todasInv.filter(function (f) { return invMoneda(f) === mon; });
+      if (!deMon.length) return;
+      var porPlat = {};
+      deMon.forEach(function (f) {
+        var k = f.plataforma || 'Sin dato';
+        var m = invValor(f);
+        porPlat[k] = (porPlat[k] || 0) + (String(f.tipo).toLowerCase() === 'venta' ? -m : m);
+      });
+      var tit = document.createElement('p');
+      tit.className = 'hint';
+      tit.textContent = mon === 'USD' ? 'En dólares:' : 'En pesos:';
+      el.appendChild(tit);
+      var cont = document.createElement('div');
+      el.appendChild(cont);
+      barras(cont, Object.keys(porPlat).map(function (k) { return [k, porPlat[k]]; }).sort(function (a, b) { return b[1] - a[1]; }), mon === 'USD' ? fmtUSD : fmtARS);
     });
-    var cont = document.createElement('div');
-    el.appendChild(cont);
-    barras(cont, Object.keys(porPlat).map(function (k) { return [k, porPlat[k]]; }).sort(function (a, b) { return b[1] - a[1]; }), fmtUSD);
   }
 }
 $('mesSelector').addEventListener('change', pintarAnalisis);
@@ -2028,7 +2181,8 @@ function pintarTodo() {
   pintarConfig();
   pintarLista('listaGastos', conPendientes('GASTOS'), 'gasto', 'g');
   pintarLista('listaIngresos', conPendientes('INGRESOS'), 'ingreso', 'i');
-  pintarLista('listaInversiones', conPendientes('INVERSIONES'), 'inversion', 'v');
+  pintarLista('listaInversiones', conPendientes('INVERSIONES').filter(function (f) { return String(f.tipo) !== 'Valor'; }), 'inversion', 'v');
+  pintarPosiciones();
   pintarDeudas();
   pintarPendientes();
   if ($('p-analisis').classList.contains('activa')) pintarAnalisis();

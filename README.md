@@ -86,6 +86,14 @@ a fijos, hasta 30% a variables y al menos 20% para ahorrar. Y la tarjeta
 "Presupuesto y fondo de seguridad" promedia tus últimos 6 meses para
 proyectar (ingreso estimado + fondo de seguridad de 6 meses de fijos).
 
+## Inversiones en pesos o dólares, con seguimiento
+
+Las inversiones se cargan en **US$ o en $** (toggle de moneda). La tarjeta
+**"Tus inversiones"** junta las compras y ventas de cada inversión
+(plataforma + activo) y, tocándola, le anotás **cuánto vale hoy** cada
+tanto: la app te muestra la ganancia o pérdida contra lo invertido y
+guarda el historial de valores para ver cómo se fue moviendo.
+
 ## Objetivos financieros
 
 En Análisis está la tarjeta **Objetivos**: ahorro con nombre y meta,
