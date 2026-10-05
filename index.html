@@ -1128,6 +1128,44 @@ $('btnInversion').addEventListener('click', function () {
 });
 // ═══ Posiciones: cada inversión (plataforma + activo) con su valor actual ═══
 var posicionAbierta = null;
+// Criptos cuyo precio sabemos buscar solo (CoinGecko, sin clave)
+var CRIPTO_IDS = {
+  btc: 'bitcoin', bitcoin: 'bitcoin', eth: 'ethereum', ethereum: 'ethereum',
+  usdt: 'tether', tether: 'tether', usdc: 'usd-coin', dai: 'dai',
+  sol: 'solana', solana: 'solana', bnb: 'binancecoin', ada: 'cardano',
+  doge: 'dogecoin', dogecoin: 'dogecoin', xrp: 'ripple', dot: 'polkadot',
+  matic: 'matic-network', ltc: 'litecoin'
+};
+function criptoIdDe(activo) { return CRIPTO_IDS[String(activo || '').trim().toLowerCase()] || ''; }
+// Registra el valor de hoy a partir de la CANTIDAD: busca el precio y calcula
+function guardarValorPorCantidad(pos, cantidad) {
+  var id = criptoIdDe(pos.activo);
+  var vs = pos.moneda === 'USD' ? 'usd' : 'ars';
+  aviso('info', 'Buscando el precio de ' + pos.activo + '…', true);
+  fetch('https://api.coingecko.com/api/v3/simple/price?ids=' + id + '&vs_currencies=' + vs)
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      var precio = j && j[id] && j[id][vs];
+      if (!(precio > 0)) throw new Error('sin precio');
+      var fmt = pos.moneda === 'USD' ? fmtUSD : fmtARS;
+      var valor = Math.round(cantidad * precio * 100) / 100;
+      var idV = nuevoId();
+      guardar({
+        accion: 'fila', hoja: 'INVERSIONES', id: idV, esquema: ESQUEMAS.INVERSIONES,
+        datos: {
+          ID: idV, FECHA: hoyISO(), TIPO: 'Valor',
+          PLATAFORMA: pos.plataforma, ACTIVO: pos.activo,
+          MONEDA: pos.moneda, MONTO: valor,
+          MONTO_USD: pos.moneda === 'USD' ? valor : '',
+          CANTIDAD: cantidad, NOTA: 'precio ' + fmt.format(precio), REGISTRADO: ahora()
+        }
+      }, null, function () {});
+      aviso('ok', cantidad + ' ' + pos.activo + ' × ' + fmt.format(precio) + ' = ' + fmt.format(valor) + '. Anotado.');
+    })
+    .catch(function () {
+      aviso('error', 'No pude averiguar el precio ahora. Probá en un rato, o anotá el valor directo.');
+    });
+}
 function guardarValor(pos, monto) {
   var idV = nuevoId();
   guardar({
@@ -1171,7 +1209,8 @@ function pintarPosiciones() {
     var b = document.createElement('b');
     b.textContent = p.plataforma + (p.activo ? ' · ' + p.activo : '');
     var s = document.createElement('small');
-    s.textContent = 'invertido ' + fmt.format(p.neto) + (ultimo ? ' · valor al ' + fmtFecha(ultimo.fecha) : '');
+    s.textContent = 'invertido ' + fmt.format(p.neto) + (ultimo ? ' · valor al ' + fmtFecha(ultimo.fecha) : '') +
+      (ultimo && parseFloat(ultimo.cantidad) > 0 ? ' · tenés ' + parseFloat(ultimo.cantidad) + ' ' + p.activo : '');
     if (ultimo && p.neto > 0) {
       var dif = invValor(ultimo) - p.neto;
       var tag = document.createElement('span');
@@ -1191,7 +1230,8 @@ function pintarPosiciones() {
     p.valores.slice().sort(ordenarPorFecha).forEach(function (v) {
       var m = document.createElement('div'); m.className = 'mov';
       var izq = document.createElement('span');
-      izq.textContent = fmtFecha(v.fecha) + ' · valía' + (v._pendiente ? ' (subiendo ↑)' : '');
+      var cant = parseFloat(v.cantidad);
+      izq.textContent = fmtFecha(v.fecha) + ' · valía' + (cant > 0 ? ' (' + cant + ' ' + p.activo + ')' : '') + (v._pendiente ? ' (subiendo ↑)' : '');
       izq.style.fontSize = '.85rem';
       var der = document.createElement('b'); der.textContent = fmt.format(invValor(v));
       m.appendChild(izq); m.appendChild(der);
@@ -1217,6 +1257,25 @@ function pintarPosiciones() {
     });
     form.appendChild(inp); form.appendChild(btnV);
     detalle.appendChild(form);
+    // Si es una cripto conocida, alcanza con la cantidad: el precio se busca solo
+    if (criptoIdDe(p.activo)) {
+      var hintC = document.createElement('p');
+      hintC.className = 'hint';
+      hintC.textContent = 'O poné cuántos ' + p.activo + ' tenés y el precio se busca solo:';
+      detalle.appendChild(hintC);
+      var formC = document.createElement('div'); formC.className = 'pagoForm';
+      var inpC = document.createElement('input');
+      inpC.type = 'number'; inpC.min = '0'; inpC.step = 'any'; inpC.inputMode = 'decimal';
+      inpC.placeholder = '¿Cuántos ' + p.activo + ' tenés?';
+      var btnC = document.createElement('button'); btnC.type = 'button'; btnC.textContent = '＋ Cantidad';
+      btnC.addEventListener('click', function () {
+        var c = parseFloat(inpC.value);
+        if (!(c >= 0)) return aviso('error', 'Poné la cantidad de ' + p.activo + '.');
+        guardarValorPorCantidad(p, c);
+      });
+      formC.appendChild(inpC); formC.appendChild(btnC);
+      detalle.appendChild(formC);
+    }
     caja.appendChild(detalle);
     cab.addEventListener('click', function () {
       posicionAbierta = detalle.classList.toggle('abierto') ? key : null;

@@ -93,6 +93,8 @@ Las inversiones se cargan en **US$ o en $** (toggle de moneda). La tarjeta
 (plataforma + activo) y, tocándola, le anotás **cuánto vale hoy** cada
 tanto: la app te muestra la ganancia o pérdida contra lo invertido y
 guarda el historial de valores para ver cómo se fue moviendo.
+Si el activo es una cripto conocida (BTC, ETH, USDT…), alcanza con poner
+**cuántos tokens tenés**: el precio se busca solo y el valor se calcula.
 
 ## Objetivos financieros
 
