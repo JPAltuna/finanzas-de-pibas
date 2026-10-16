@@ -175,6 +175,8 @@
     nav { max-width: none; }
     .pantalla.activa { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; align-items: start; }
     .pantalla.activa > .kpis { grid-column: 1 / -1; }
+    /* La tabla de meses necesita todo el ancho: esta pantalla va en una columna */
+    #p-meses.activa { display: block; }
   }
 
   #pendientesAviso {
@@ -243,13 +245,17 @@
     background: var(--crema); color: var(--suave); font-weight: 700; font-size: .74rem;
     max-width: 110px; white-space: normal; padding-left: 2px;
   }
-  .tablaMeses tr:first-child th { text-align: right; }
+  .tablaMeses tr:first-child th { text-align: center; }
   .tablaMeses tr:first-child th b { display: block; color: var(--tinta); font-size: .82rem; }
   .tablaMeses tr:first-child th small { color: var(--suave); font-weight: 400; font-size: .68rem; }
   .tablaMeses td.colProv, .tablaMeses th.colProv { background: rgba(246, 231, 169, .10); }
   .tablaMeses tr:first-child th.colProv small { color: var(--amarillo); }
-  .tablaMeses td.colActual, .tablaMeses th.colActual { background: rgba(244, 241, 230, .09); }
-  .tablaMeses tr:first-child th.colActual b { color: var(--amarillo); }
+  .tablaMeses td.colActual, .tablaMeses th.colActual { background: rgba(244, 241, 230, .14); }
+  .tablaMeses tr:first-child th.colActual { border-top: 3px solid var(--amarillo); border-radius: 6px 2px 0 0; }
+  .tablaMeses tr:first-child th.colActual b, .tablaMeses tr:first-child th.colActual small { color: var(--amarillo); }
+  .tablaMeses td .apilado { display: block; line-height: 1.35; }
+  .tablaMeses td.celNota { cursor: pointer; font-size: .74rem; color: var(--suave); max-width: 120px; white-space: normal; }
+  .tablaMeses td.celNota.conNota { color: var(--tinta); }
   .tablaMeses .filaBalance td, .tablaMeses .filaBalance th { border-top: 1.5px solid var(--borde); font-weight: 800; }
   .tablaMeses .filaAcum td { font-weight: 700; opacity: .9; }
   .tablaMeses td input {
@@ -651,6 +657,7 @@ if (!estado.datos.presupuesto) estado.datos.presupuesto = [];
 if (!estado.datos.objetivos) estado.datos.objetivos = [];
 if (!estado.datos.proyeccion) estado.datos.proyeccion = [];
 if (!estado.datos.eventos) estado.datos.eventos = [];
+if (!estado.datos.notas) estado.datos.notas = [];
 estado.plazoObjetivo = 'Corto';
 estado.monedaObjetivo = 'ARS';
 estado.monedaInversion = 'USD';
@@ -693,7 +700,9 @@ var ESQUEMAS = {
   // Proyección mensual editada a mano (vale la fila más nueva de cada MES)
   PROYECCION: ['ID', 'MES', 'INGRESOS', 'FIJOS', 'VARIABLES', 'REGISTRADO'],
   // Eventos puntuales proyectados (un viaje, un retiro, turnos médicos…)
-  EVENTOS: ['ID', 'MES', 'NOMBRE', 'TIPO', 'MONTO', 'REGISTRADO']
+  EVENTOS: ['ID', 'MES', 'NOMBRE', 'TIPO', 'MONTO', 'REGISTRADO'],
+  // Nota de cierre de cada mes ("este mes viajé, nació Vicente…")
+  NOTAS: ['ID', 'MES', 'NOTA', 'REGISTRADO']
 };
 var CONFIG_COLS = {
   categoriasGastos: 'CATEGORIAS GASTOS',
@@ -725,7 +734,7 @@ function objDeDatos(datos) {
   return o;
 }
 function claveDeHoja(hoja) {
-  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : hoja === 'PRESUPUESTO' ? 'presupuesto' : hoja === 'OBJETIVOS' ? 'objetivos' : hoja === 'PROYECCION' ? 'proyeccion' : hoja === 'EVENTOS' ? 'eventos' : '';
+  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : hoja === 'PRESUPUESTO' ? 'presupuesto' : hoja === 'OBJETIVOS' ? 'objetivos' : hoja === 'PROYECCION' ? 'proyeccion' : hoja === 'EVENTOS' ? 'eventos' : hoja === 'NOTAS' ? 'notas' : '';
 }
 // Registros de la planilla + los que todavía están por subir (marcados _pendiente).
 // Los que tienen un borrado pendiente desaparecen de la vista al instante.
@@ -865,7 +874,7 @@ function sincronizar(conAviso) {
   if (!estado.url || estado.sincronizando) return Promise.resolve();
   estado.sincronizando = true;
   $('btnSync').textContent = '…';
-  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,PRESUPUESTO,OBJETIVOS,PROYECCION,EVENTOS,CONFIG' }).then(function (r) {
+  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,PRESUPUESTO,OBJETIVOS,PROYECCION,EVENTOS,NOTAS,CONFIG' }).then(function (r) {
     if (!r || !r.ok) {
       var msj = (r && r.error) ? r.error : 'la planilla respondió algo raro';
       if (/desconocida/i.test(msj)) msj = 'tu conector es de una versión vieja. Pegá el código nuevo en Apps Script y hacé "Nueva versión" (pasos en el README).';
@@ -880,7 +889,8 @@ function sincronizar(conAviso) {
       presupuesto: filasAObjetos(h.PRESUPUESTO),
       objetivos: filasAObjetos(h.OBJETIVOS),
       proyeccion: filasAObjetos(h.PROYECCION),
-      eventos: filasAObjetos(h.EVENTOS)
+      eventos: filasAObjetos(h.EVENTOS),
+      notas: filasAObjetos(h.NOTAS)
     };
     lsSet(LS.datos, estado.datos);
     var cfg = configDeCruda(h.CONFIG);
@@ -1711,13 +1721,15 @@ function descPendiente(r) {
     : r.hoja === 'PRESUPUESTO' ? 'Presupuesto'
     : r.hoja === 'OBJETIVOS' ? (d.OBJETIVO_ID ? 'Aporte a objetivo' : 'Objetivo')
     : r.hoja === 'PROYECCION' ? 'Proyección'
-    : r.hoja === 'EVENTOS' ? 'Evento' : 'Inversión';
+    : r.hoja === 'EVENTOS' ? 'Evento'
+    : r.hoja === 'NOTAS' ? 'Nota' : 'Inversión';
   var detalle = d.CATEGORIA || d.PLATAFORMA || d.CON || d.NOMBRE || (d.MES ? nombreMes(String(d.MES).slice(0, 7)) : '');
   var fmtDesc = (r.hoja === 'OBJETIVOS' && d.MONEDA === 'USD') ? fmtUSD : fmtARS;
   var monto = r.hoja === 'INVERSIONES'
     ? (d.MONEDA === 'ARS' ? fmtARS : fmtUSD).format(parseFloat(d.MONTO || d.MONTO_USD) || 0)
     : fmtDesc.format(parseFloat(d.MONTO || d.META || d.INGRESOS) || 0);
   if (r.accion === 'fila_borrar') que = 'Borrar ' + que.toLowerCase();
+  if (r.hoja === 'NOTAS') return que + (detalle ? ' · ' + detalle : '');
   return que + (d.FECHA ? ' · ' + fmtFecha(d.FECHA) : '') + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
 }
 function pintarPendientes() {
@@ -2529,9 +2541,15 @@ function pintarMeses() {
   datos.forEach(function (d) {
     var td = document.createElement('td');
     td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
-    if (d.esFuturo) td.textContent = '—';
+    if (d.esFuturo || (!d.ahorro && !d.ahorroUsd)) td.textContent = '—';
     else {
-      td.textContent = (d.ahorro ? fmtARS.format(d.ahorro) : '') + (d.ahorro && d.ahorroUsd ? ' · ' : '') + (d.ahorroUsd ? fmtUSD.format(d.ahorroUsd) : '') || '—';
+      // Apilado en dos renglones para que la columna no se ensanche
+      [d.ahorro ? fmtARS.format(d.ahorro) : '', d.ahorroUsd ? fmtUSD.format(d.ahorroUsd) : ''].forEach(function (t) {
+        if (!t) return;
+        var sp = document.createElement('span');
+        sp.className = 'apilado'; sp.textContent = t;
+        td.appendChild(sp);
+      });
       td.style.color = 'var(--ocre)';
     }
     trAh.appendChild(td);
@@ -2557,6 +2575,31 @@ function pintarMeses() {
     trAc.appendChild(td);
   });
   tabla.appendChild(trAc);
+
+  // Nota de cierre: la "explicación" de cada mes ya vivido
+  var notas = {};
+  conPendientes('NOTAS').forEach(function (f) { if (f.mes) notas[String(f.mes).slice(0, 7)] = String(f.nota || ''); });
+  var trNo = filaDe('Nota del mes 📝');
+  datos.forEach(function (d) {
+    var td = document.createElement('td');
+    td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
+    if (d.esFuturo) { td.textContent = '—'; trNo.appendChild(td); return; }
+    var nota = notas[d.m] || '';
+    td.className += ' celNota' + (nota ? ' conNota' : '');
+    td.textContent = nota ? (nota.length > 34 ? nota.slice(0, 32) + '…' : nota) : '✎ anotar';
+    td.title = nota || 'Anotar qué pasó este mes';
+    td.addEventListener('click', function () {
+      var nueva = prompt('Nota de ' + nombreMes(d.m) + ' (¿qué pasó este mes?):', nota);
+      if (nueva === null) return;
+      var idN = nuevoId();
+      guardar({
+        accion: 'fila', hoja: 'NOTAS', id: idN, esquema: ESQUEMAS.NOTAS,
+        datos: { ID: idN, MES: d.m, NOTA: nueva.trim(), REGISTRADO: ahora() }
+      }, null, function () {});
+    });
+    trNo.appendChild(td);
+  });
+  tabla.appendChild(trNo);
 
   wrap.appendChild(tabla);
   el.appendChild(wrap);
