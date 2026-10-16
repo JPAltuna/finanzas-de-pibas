@@ -248,13 +248,9 @@
   .tablaMeses tr:first-child th { text-align: center; }
   .tablaMeses tr:first-child th b { display: block; color: var(--tinta); font-size: .82rem; }
   .tablaMeses tr:first-child th small { color: var(--suave); font-weight: 400; font-size: .68rem; }
-  /* Columnas proyectadas: claras a propósito (papel), con texto musgo oscuro */
-  .tablaMeses td.colProv, .tablaMeses th.colProv {
-    background: #c9d2bc; color: #3c4a3d;
-    border-bottom-color: rgba(60, 74, 61, .3);
-  }
-  .tablaMeses tr:first-child th.colProv b { color: #2d3a31; }
-  .tablaMeses tr:first-child th.colProv small { color: #8a6d1d; }
+  /* Columnas proyectadas: mismo fondo que el resto, apenas teñidas */
+  .tablaMeses td.colProv, .tablaMeses th.colProv { background: rgba(246, 231, 169, .08); }
+  .tablaMeses tr:first-child th.colProv small { color: var(--amarillo); }
   .tablaMeses td.colActual, .tablaMeses th.colActual { background: rgba(244, 241, 230, .14); }
   .tablaMeses tr:first-child th.colActual { border-top: 3px solid var(--amarillo); border-radius: 6px 2px 0 0; }
   .tablaMeses tr:first-child th.colActual b, .tablaMeses tr:first-child th.colActual small { color: var(--amarillo); }
@@ -457,6 +453,12 @@
       <input id="vCantidad" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
       <label for="vNota">Nota (opcional)</label>
       <input id="vNota" type="text" autocomplete="off">
+      <label>¿Es parte de tu fondo de emergencia?</label>
+      <div class="toggle" id="vFondo">
+        <button type="button" data-v="" class="activo">No</button>
+        <button type="button" data-v="Sí">Sí, es del fondo</button>
+      </div>
+      <p class="hint">Lo que marques acá suma al objetivo "Fondo de seguridad" en Análisis.</p>
       <button class="btn" id="btnInversion">Guardar inversión</button>
     </div>
     <div class="card">
@@ -693,7 +695,7 @@ var ESQUEMAS = {
   INGRESOS: ['ID', 'FECHA', 'MONTO', 'CATEGORIA', 'CUENTA', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO_USD', 'COTIZACION'],
   // MONEDA/MONTO se agregaron después: las filas viejas solo tienen MONTO_USD
   // (se leen como USD); TIPO puede ser Compra, Venta o Valor (cuánto vale hoy)
-  INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO'],
+  INVERSIONES: ['ID', 'FECHA', 'TIPO', 'PLATAFORMA', 'ACTIVO', 'MONTO_USD', 'CANTIDAD', 'NOTA', 'REGISTRADO', 'MONEDA', 'MONTO', 'FONDO'],
   // En DEUDAS conviven las deudas (TIPO Debo / Me deben) y sus pagos
   // (TIPO Pago, con DEUDA_ID apuntando a la deuda que achican)
   DEUDAS: ['ID', 'FECHA', 'TIPO', 'CON', 'MONTO', 'NOTA', 'REGISTRADO', 'DEUDA_ID'],
@@ -1207,6 +1209,13 @@ document.querySelectorAll('#vMoneda button').forEach(function (b) {
     $('vMontoLabel').textContent = b.dataset.v === 'USD' ? 'Monto (US$)' : 'Monto ($)';
   });
 });
+estado.fondoInversion = '';
+document.querySelectorAll('#vFondo button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    estado.fondoInversion = b.dataset.v;
+    document.querySelectorAll('#vFondo button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+  });
+});
 // Las filas viejas de inversiones solo tienen MONTO_USD: se leen como USD
 function invValor(f) {
   var m = (f.monto === '' || f.monto === undefined || f.monto === null) ? f.monto_usd : f.monto;
@@ -1227,7 +1236,8 @@ $('btnInversion').addEventListener('click', function () {
       MONEDA: estado.monedaInversion, MONTO: monto,
       MONTO_USD: estado.monedaInversion === 'USD' ? monto : '',
       CANTIDAD: parseFloat($('vCantidad').value) || '',
-      NOTA: $('vNota').value.trim(), REGISTRADO: ahora()
+      NOTA: $('vNota').value.trim(), REGISTRADO: ahora(),
+      FONDO: estado.fondoInversion
     }
   }, this, function () { $('vMonto').value = ''; $('vCantidad').value = ''; $('vNota').value = ''; });
 });
@@ -1881,7 +1891,7 @@ function pintarLista(idEl, filas, tipo, pfx) {
       plata.className = 'plata ingreso'; plata.textContent = '+ ' + fmtARS.format(f.monto || 0);
     } else {
       b.textContent = (f.plataforma || '') + (f.activo ? ' · ' + f.activo : '');
-      s.textContent = fmtFecha(f.fecha) + ' · ' + (f.tipo || 'Compra') + (f.cantidad ? ' · ' + f.cantidad + ' u.' : '');
+      s.textContent = fmtFecha(f.fecha) + ' · ' + (f.tipo || 'Compra') + (f.cantidad ? ' · ' + f.cantidad + ' u.' : '') + (String(f.fondo || '').trim() ? ' · fondo de emergencia' : '');
       plata.className = 'plata usd';
       var fmtInv = invMoneda(f) === 'USD' ? fmtUSD : fmtARS;
       plata.textContent = (String(f.tipo).toLowerCase() === 'venta' ? '− ' : '+ ') + fmtInv.format(invValor(f));
@@ -2209,6 +2219,16 @@ function pintarProyeccion() {
 }
 
 // ═══ Objetivos financieros: ahorro con nombre, meta y aportes ═══
+// Inversiones marcadas como fondo de emergencia (compras − ventas, por moneda)
+function fondoInversiones() {
+  var r = { ars: 0, usd: 0 };
+  conPendientes('INVERSIONES').forEach(function (f) {
+    if (String(f.tipo) === 'Valor' || !String(f.fondo || '').trim()) return;
+    var v = invValor(f) * (String(f.tipo).toLowerCase() === 'venta' ? -1 : 1);
+    if (invMoneda(f) === 'USD') r.usd += v; else r.ars += v;
+  });
+  return r;
+}
 var objetivoAbierto = null;
 document.querySelectorAll('#objPlazo button').forEach(function (b) {
   b.addEventListener('click', function () {
@@ -2289,6 +2309,13 @@ function pintarObjetivos() {
         var fmt = esUsd ? fmtUSD : fmtARS;
         var meta = parseFloat(o.meta) || 0;
         var juntado = (aportesPor[o.id] || []).reduce(function (s, a) { return s + (parseFloat(a.monto) || 0); }, 0);
+        // Si es el fondo de emergencia, suman las inversiones marcadas como fondo
+        var fi = null, deInversiones = 0;
+        if (/fondo/i.test(String(o.nombre))) {
+          fi = fondoInversiones();
+          deInversiones = esUsd ? fi.usd : fi.ars;
+          juntado += deInversiones;
+        }
         var falta = Math.max(0, meta - juntado);
         var cumplido = meta > 0 && juntado >= meta;
 
@@ -2332,6 +2359,14 @@ function pintarObjetivos() {
 
         var detalle = document.createElement('div');
         detalle.className = 'detalle' + (objetivoAbierto === o.id ? ' abierto' : '');
+        if (fi && (fi.ars || fi.usd)) {
+          var hInv = document.createElement('p');
+          hInv.className = 'hint';
+          hInv.textContent = 'Inversiones marcadas como fondo: ' +
+            [fi.ars ? fmtARS.format(fi.ars) : '', fi.usd ? fmtUSD.format(fi.usd) : ''].filter(Boolean).join(' · ') +
+            ' (al objetivo le suma lo que está en su misma moneda).';
+          detalle.appendChild(hInv);
+        }
         if (!cumplido && !esUsd && ritmo > 0 && falta > 0) {
           var proy = document.createElement('p');
           proy.className = 'hint';
@@ -2511,9 +2546,8 @@ function pintarMeses() {
   });
   tabla.appendChild(trCab);
 
-  // Columnas reales: pasteles de siempre. Columnas proyectadas (fondo claro):
-  // tonos oscuros — mostaza oscura, ladrillo y verde musgo — para que se lean.
-  var P_POS = '#8a6d1d', P_NEG = '#9c3f1e', P_ING = '#44632a';
+  // Misma lógica de colores que Análisis: oliva ingresos, terracota gastos,
+  // amarillo balance. Nada de colores especiales acá.
   var inputsPorMes = {}; // mes -> {ing, fijos, variables}
   [['Ingresos', 'ing', 'var(--oliva)'], ['Gastos fijos', 'fijos', 'var(--terracota)'], ['Gastos variables', 'variables', 'var(--terracota)']].forEach(function (c) {
     var tr = filaDe(c[0]);
@@ -2559,7 +2593,7 @@ function pintarMeses() {
     var td = document.createElement('td');
     td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
     td.textContent = fmtARS.format(d.balance);
-    td.style.color = d.esFuturo ? (d.balance >= 0 ? P_POS : P_NEG) : (d.balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)');
+    td.style.color = d.balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
     trBal.appendChild(td);
   });
   tabla.appendChild(trBal);
@@ -2569,7 +2603,7 @@ function pintarMeses() {
     var td = document.createElement('td');
     td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
     td.textContent = fmtARS.format(d.acum);
-    td.style.color = d.esFuturo ? (d.acum >= 0 ? P_POS : P_NEG) : (d.acum >= 0 ? 'var(--amarillo)' : 'var(--terracota)');
+    td.style.color = d.acum >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
     trAc.appendChild(td);
   });
   tabla.appendChild(trAc);
@@ -2583,14 +2617,21 @@ function pintarMeses() {
     if (!evs.length) { td.textContent = '—'; trEv.appendChild(td); return; }
     evs.forEach(function (e) {
       var esIng = String(e.tipo) === 'Ingreso';
-      var sp = document.createElement('span');
-      sp.className = 'apilado';
       var nom = String(e.nombre || 'Evento');
-      sp.textContent = '✦ ' + (nom.length > 15 ? nom.slice(0, 14) + '…' : nom) + ' ' + (esIng ? '+' : '−') + fmtARS.format(e.monto || 0);
-      sp.title = nom + ' · ' + (esIng ? 'ingreso extra' : 'gasto extra');
-      sp.style.color = d.esFuturo ? (esIng ? P_ING : P_NEG) : (esIng ? 'var(--oliva)' : 'var(--terracota)');
-      if (!d.esFuturo) sp.style.opacity = '.6';
-      td.appendChild(sp);
+      var color = esIng ? 'var(--oliva)' : 'var(--terracota)';
+      // Dos renglones (nombre arriba, monto abajo) para no ensanchar la columna
+      var sp1 = document.createElement('span');
+      sp1.className = 'apilado';
+      sp1.textContent = '✦ ' + (nom.length > 15 ? nom.slice(0, 14) + '…' : nom);
+      sp1.title = nom + ' · ' + (esIng ? 'ingreso extra' : 'gasto extra');
+      sp1.style.color = color;
+      var sp2 = document.createElement('span');
+      sp2.className = 'apilado';
+      sp2.textContent = (esIng ? '+ ' : '− ') + fmtARS.format(e.monto || 0);
+      sp2.style.color = color;
+      sp2.style.fontWeight = '700';
+      if (!d.esFuturo) { sp1.style.opacity = '.6'; sp2.style.opacity = '.6'; }
+      td.appendChild(sp1); td.appendChild(sp2);
     });
     trEv.appendChild(td);
   });
