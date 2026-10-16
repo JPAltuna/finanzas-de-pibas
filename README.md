@@ -96,6 +96,15 @@ guarda el historial de valores para ver cómo se fue moviendo.
 Si el activo es una cripto conocida (BTC, ETH, USDT…), alcanza con poner
 **cuántos tokens tenés**: el precio se busca solo y el valor se calcula.
 
+## Meses: proyección y análisis intermensual
+
+La pestaña **Meses** muestra los 13 meses alrededor de hoy: los que ya
+pasaron con **montos reales** (ingresos, fijos, variables, ahorro e
+inversión, balance) y los que vienen con **proyección** — precargada con
+tus promedios y editable mes por mes como quieras. Además podés anotar
+**eventos proyectados** (un viaje, un retiro, turnos médicos): gastos o
+ingresos extra puntuales que se suman a la proyección de su mes.
+
 ## Objetivos financieros
 
 En Análisis está la tarjeta **Objetivos**: ahorro con nombre y meta,

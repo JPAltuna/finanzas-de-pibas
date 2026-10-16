@@ -149,7 +149,7 @@
   nav {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
     background: var(--crema); border-top: 1px solid var(--borde);
-    display: grid; grid-template-columns: repeat(5, 1fr);
+    display: grid; grid-template-columns: repeat(6, 1fr);
     padding-bottom: env(safe-area-inset-bottom);
     max-width: 640px; margin: 0 auto;
   }
@@ -182,7 +182,7 @@
     border-radius: 12px 4px 12px 4px; background: #74705c; color: #f4f0e0;
     font-size: .88rem; font-weight: 600;
   }
-  #pendientesAviso button { margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px 3px 10px 3px; border: none; background: var(--carbon); color: #f4f1e6; font-weight: 800; cursor: pointer; }
+  #pendientesAviso > button { margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px 3px 10px 3px; border: none; background: var(--carbon); color: #f4f1e6; font-weight: 800; cursor: pointer; }
   #pendientesAviso .pendItem { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 500; font-size: .84rem; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(244, 240, 224, .25); }
   .btnX {
     background: none; border: none; color: var(--suave); opacity: .7;
@@ -466,6 +466,41 @@
     </div>
   </section>
 
+  <!-- ══════════ MESES (proyección intermensual) ══════════ -->
+  <section class="pantalla" id="p-meses">
+    <div class="card">
+      <h2>Mes a mes</h2>
+      <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Los 13 meses alrededor de hoy: lo que ya pasó con montos reales, y lo que viene proyectado. Tocá un mes futuro para ajustar la proyección a mano (viene precargada con tus promedios).</p>
+      <div id="listaMeses" class="vacio">Cargando…</div>
+    </div>
+    <div class="card">
+      <h2>Eventos proyectados</h2>
+      <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Cosas puntuales que vienen y mueven la aguja: un viaje, un retiro, turnos médicos. Se suman a la proyección de su mes.</p>
+      <div id="listaEventos" class="vacio">Sin eventos anotados.</div>
+      <span class="verMas" id="verNuevoEvento">▸ Nuevo evento</span>
+      <div id="formEvento" hidden>
+        <label for="evNombre">¿Qué es?</label>
+        <input id="evNombre" type="text" placeholder="Ej: Retiro, viaje, turno médico…" autocomplete="off">
+        <label>Tipo</label>
+        <div class="toggle" id="evTipo">
+          <button type="button" data-v="Gasto" class="activo">Gasto extra</button>
+          <button type="button" data-v="Ingreso">Ingreso extra</button>
+        </div>
+        <div class="fila2">
+          <div>
+            <label for="evMes">¿En qué mes?</label>
+            <select id="evMes"></select>
+          </div>
+          <div>
+            <label for="evMonto">Monto ($)</label>
+            <input id="evMonto" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0">
+          </div>
+        </div>
+        <button class="btn" id="btnEvento">Guardar evento</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ══════════ ANÁLISIS ══════════ -->
   <section class="pantalla" id="p-analisis">
     <div class="toggle" id="perToggle">
@@ -535,6 +570,7 @@
   <button data-p="ingresos"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7H3.5a1 1 0 0 1 0-2H18a1 1 0 0 0 0-2H3.5A2.5 2.5 0 0 0 1 5.5V18a3 3 0 0 0 3 3h17a2 2 0 0 0 2-2v-4h-7.5a2.5 2.5 0 0 1 0-5H23V9a2 2 0 0 0-2-2z"/><path fill-rule="evenodd" d="M15.5 12H23v4h-7.5a2 2 0 0 1 0-4zm1.5.9a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg></span>Ingresos</button>
   <button data-p="inversiones"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 21v-8h4v8H2zm7 0V9h4v12H9zm7 0v-6h4v6h-4z"/><path d="M15 2h7v7l-2.4-2.4-5.4 5.4-2.2-2.2 5.4-5.4L15 2z"/></svg></span>Inversiones</button>
   <button data-p="deudas"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v3h6.5v2H13v12h4v2H7v-2h4V7H4.5V5H11V2z"/><path d="M5.4 6.4 8.9 12H1.9l3.5-5.6zm-3.6 7a3.6 3.6 0 0 0 7.2 0H1.8zM18.6 6.4l3.5 5.6h-7l3.5-5.6zm-3.6 7a3.6 3.6 0 0 0 7.2 0H15z"/></svg></span>Deudas</button>
+  <button data-p="meses"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M3 5h18a1 1 0 0 1 1 1v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1zm1 5v9h16v-9H4z"/><path d="M7 2h2v4H7zM15 2h2v4h-2z"/><path d="M6.5 12.5h3v2h-3zM10.8 12.5h3v2h-3zM15.1 12.5h3v2h-3zM6.5 16h3v2h-3zM10.8 16h3v2h-3z"/></svg></span>Meses</button>
   <button data-p="analisis"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2a9.5 9.5 0 0 1 8.5 8.5h-8.5V2z"/><path d="M10.5 4.5a9 9 0 1 0 9 10.5h-9V4.5z"/></svg></span>Análisis</button>
 </nav>
 
@@ -569,9 +605,12 @@ var estado = {
 if (!estado.datos.deudas) estado.datos.deudas = []; // caché de versiones anteriores
 if (!estado.datos.presupuesto) estado.datos.presupuesto = [];
 if (!estado.datos.objetivos) estado.datos.objetivos = [];
+if (!estado.datos.proyeccion) estado.datos.proyeccion = [];
+if (!estado.datos.eventos) estado.datos.eventos = [];
 estado.plazoObjetivo = 'Corto';
 estado.monedaObjetivo = 'ARS';
 estado.monedaInversion = 'USD';
+estado.tipoEvento = 'Gasto';
 
 var $ = function (id) { return document.getElementById(id); };
 var fmtARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
@@ -606,7 +645,11 @@ var ESQUEMAS = {
   PRESUPUESTO: ['ID', 'CATEGORIA', 'MONTO', 'REGISTRADO'],
   // En OBJETIVOS conviven los objetivos (NOMBRE/PLAZO/META) y sus aportes
   // (MONTO + OBJETIVO_ID apuntando al objetivo que alimentan)
-  OBJETIVOS: ['ID', 'FECHA', 'NOMBRE', 'PLAZO', 'MONEDA', 'META', 'MONTO', 'REGISTRADO', 'OBJETIVO_ID']
+  OBJETIVOS: ['ID', 'FECHA', 'NOMBRE', 'PLAZO', 'MONEDA', 'META', 'MONTO', 'REGISTRADO', 'OBJETIVO_ID'],
+  // Proyección mensual editada a mano (vale la fila más nueva de cada MES)
+  PROYECCION: ['ID', 'MES', 'INGRESOS', 'FIJOS', 'VARIABLES', 'REGISTRADO'],
+  // Eventos puntuales proyectados (un viaje, un retiro, turnos médicos…)
+  EVENTOS: ['ID', 'MES', 'NOMBRE', 'TIPO', 'MONTO', 'REGISTRADO']
 };
 var CONFIG_COLS = {
   categoriasGastos: 'CATEGORIAS GASTOS',
@@ -638,7 +681,7 @@ function objDeDatos(datos) {
   return o;
 }
 function claveDeHoja(hoja) {
-  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : hoja === 'PRESUPUESTO' ? 'presupuesto' : hoja === 'OBJETIVOS' ? 'objetivos' : '';
+  return hoja === 'GASTOS' ? 'gastos' : hoja === 'INGRESOS' ? 'ingresos' : hoja === 'INVERSIONES' ? 'inversiones' : hoja === 'DEUDAS' ? 'deudas' : hoja === 'PRESUPUESTO' ? 'presupuesto' : hoja === 'OBJETIVOS' ? 'objetivos' : hoja === 'PROYECCION' ? 'proyeccion' : hoja === 'EVENTOS' ? 'eventos' : '';
 }
 // Registros de la planilla + los que todavía están por subir (marcados _pendiente).
 // Los que tienen un borrado pendiente desaparecen de la vista al instante.
@@ -729,6 +772,7 @@ function mostrar(p) {
     b.classList.toggle('activo', b.dataset.p === p);
   });
   if (p === 'analisis') pintarAnalisis();
+  if (p === 'meses') pintarMeses();
 }
 document.querySelectorAll('#tabs button').forEach(function (b) {
   b.addEventListener('click', function () { mostrar(b.dataset.p); });
@@ -777,7 +821,7 @@ function sincronizar(conAviso) {
   if (!estado.url || estado.sincronizando) return Promise.resolve();
   estado.sincronizando = true;
   $('btnSync').textContent = '…';
-  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,PRESUPUESTO,OBJETIVOS,CONFIG' }).then(function (r) {
+  return jsonp({ accion: 'leer', hojas: 'GASTOS,INGRESOS,INVERSIONES,DEUDAS,PRESUPUESTO,OBJETIVOS,PROYECCION,EVENTOS,CONFIG' }).then(function (r) {
     if (!r || !r.ok) {
       var msj = (r && r.error) ? r.error : 'la planilla respondió algo raro';
       if (/desconocida/i.test(msj)) msj = 'tu conector es de una versión vieja. Pegá el código nuevo en Apps Script y hacé "Nueva versión" (pasos en el README).';
@@ -790,7 +834,9 @@ function sincronizar(conAviso) {
       inversiones: filasAObjetos(h.INVERSIONES),
       deudas: filasAObjetos(h.DEUDAS),
       presupuesto: filasAObjetos(h.PRESUPUESTO),
-      objetivos: filasAObjetos(h.OBJETIVOS)
+      objetivos: filasAObjetos(h.OBJETIVOS),
+      proyeccion: filasAObjetos(h.PROYECCION),
+      eventos: filasAObjetos(h.EVENTOS)
     };
     lsSet(LS.datos, estado.datos);
     var cfg = configDeCruda(h.CONFIG);
@@ -1452,12 +1498,14 @@ function descPendiente(r) {
   var que = r.hoja === 'GASTOS' ? 'Gasto' : r.hoja === 'INGRESOS' ? 'Ingreso'
     : r.hoja === 'DEUDAS' ? (d.TIPO === 'Pago' ? 'Pago de deuda' : 'Deuda')
     : r.hoja === 'PRESUPUESTO' ? 'Presupuesto'
-    : r.hoja === 'OBJETIVOS' ? (d.OBJETIVO_ID ? 'Aporte a objetivo' : 'Objetivo') : 'Inversión';
-  var detalle = d.CATEGORIA || d.PLATAFORMA || d.CON || d.NOMBRE || '';
+    : r.hoja === 'OBJETIVOS' ? (d.OBJETIVO_ID ? 'Aporte a objetivo' : 'Objetivo')
+    : r.hoja === 'PROYECCION' ? 'Proyección'
+    : r.hoja === 'EVENTOS' ? 'Evento' : 'Inversión';
+  var detalle = d.CATEGORIA || d.PLATAFORMA || d.CON || d.NOMBRE || (d.MES ? nombreMes(String(d.MES).slice(0, 7)) : '');
   var fmtDesc = (r.hoja === 'OBJETIVOS' && d.MONEDA === 'USD') ? fmtUSD : fmtARS;
   var monto = r.hoja === 'INVERSIONES'
     ? (d.MONEDA === 'ARS' ? fmtARS : fmtUSD).format(parseFloat(d.MONTO || d.MONTO_USD) || 0)
-    : fmtDesc.format(parseFloat(d.MONTO || d.META) || 0);
+    : fmtDesc.format(parseFloat(d.MONTO || d.META || d.INGRESOS) || 0);
   if (r.accion === 'fila_borrar') que = 'Borrar ' + que.toLowerCase();
   return que + (d.FECHA ? ' · ' + fmtFecha(d.FECHA) : '') + (detalle ? ' · ' + detalle : '') + ' · ' + monto;
 }
@@ -2120,6 +2168,245 @@ function pintarObjetivos() {
   }
 }
 
+// ═══ Meses: 13 meses alrededor de hoy — reales atrás, proyección adelante ═══
+var mesAbiertoProy = null;
+function mesesVentana() {
+  var hoy = new Date();
+  var out = [];
+  for (var i = -6; i <= 6; i++) {
+    var d = new Date(hoy.getFullYear(), hoy.getMonth() + i, 1);
+    out.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+  }
+  return out;
+}
+// La proyección editada a mano: vale la fila más nueva de cada mes
+function proyeccionVigente() {
+  var map = {};
+  conPendientes('PROYECCION').forEach(function (f) {
+    if (f.mes) map[String(f.mes).slice(0, 7)] = f;
+  });
+  return map;
+}
+function eventosDeMes(m) {
+  return conPendientes('EVENTOS').filter(function (f) { return String(f.mes).slice(0, 7) === m; });
+}
+// Montos reales de un mes ya transcurrido (o en curso)
+function realesDeMes(m) {
+  var r = { ing: 0, fijos: 0, variables: 0, ahorro: 0, ahorroUsd: 0 };
+  conPendientes('INGRESOS').forEach(function (f) { if (mesDe(f) === m) r.ing += parseFloat(f.monto) || 0; });
+  conPendientes('GASTOS').forEach(function (f) {
+    if (mesDe(f) !== m) return;
+    if (String(f.tipo) === 'Fijo') r.fijos += parseFloat(f.monto) || 0;
+    else r.variables += parseFloat(f.monto) || 0;
+  });
+  var monedaObj = {};
+  conPendientes('OBJETIVOS').forEach(function (f) { if (!f.objetivo_id && f.nombre) monedaObj[f.id] = String(f.moneda || 'ARS'); });
+  conPendientes('OBJETIVOS').forEach(function (f) {
+    if (!f.objetivo_id || mesDe(f) !== m) return;
+    if (monedaObj[f.objetivo_id] === 'USD') r.ahorroUsd += parseFloat(f.monto) || 0;
+    else r.ahorro += parseFloat(f.monto) || 0;
+  });
+  conPendientes('INVERSIONES').forEach(function (f) {
+    if (String(f.tipo) === 'Valor' || mesDe(f) !== m) return;
+    var v = invValor(f) * (String(f.tipo).toLowerCase() === 'venta' ? -1 : 1);
+    if (invMoneda(f) === 'USD') r.ahorroUsd += v; else r.ahorro += v;
+  });
+  return r;
+}
+function pintarMeses() {
+  var el = $('listaMeses');
+  var actual = hoyISO().slice(0, 7);
+  var vig = proyeccionVigente();
+  var prom = promediosHistoricos();
+  el.className = ''; el.innerHTML = '';
+
+  mesesVentana().forEach(function (m) {
+    var esFuturo = m > actual, esActual = m === actual;
+    var evs = eventosDeMes(m);
+    var ing, fijos, variables, ahorro = 0, ahorroUsd = 0, editado = false;
+    if (esFuturo) {
+      var p = vig[m];
+      editado = !!p;
+      ing = p ? parseFloat(p.ingresos) || 0 : (prom ? prom.ing : 0);
+      fijos = p ? parseFloat(p.fijos) || 0 : (prom ? prom.fijos : 0);
+      variables = p ? parseFloat(p.variables) || 0 : (prom ? prom.variables : 0);
+    } else {
+      var r = realesDeMes(m);
+      ing = r.ing; fijos = r.fijos; variables = r.variables; ahorro = r.ahorro; ahorroUsd = r.ahorroUsd;
+    }
+    var evGasto = 0, evIngreso = 0;
+    evs.forEach(function (e) {
+      var v = parseFloat(e.monto) || 0;
+      if (String(e.tipo) === 'Ingreso') evIngreso += v; else evGasto += v;
+    });
+    var balance = esFuturo ? ing - fijos - variables - evGasto + evIngreso : ing - fijos - variables;
+
+    var caja = document.createElement('div'); caja.className = 'deuda';
+    var cab = document.createElement('div'); cab.className = 'cabecera';
+    var det = document.createElement('div'); det.className = 'det';
+    var b = document.createElement('b');
+    b.textContent = nombreMes(m) + (esActual ? ' · en curso' : '');
+    var s = document.createElement('small');
+    s.textContent = (esFuturo ? (editado ? 'proyección tuya' : 'proyección (tu promedio)') : 'real') +
+      (evs.length ? ' · ' + evs.length + ' evento(s)' : '');
+    det.appendChild(b); det.appendChild(s);
+    var plata = document.createElement('div'); plata.className = 'plata';
+    plata.style.color = balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
+    if (esFuturo) plata.style.opacity = '.85';
+    plata.textContent = fmtARS.format(balance);
+    cab.appendChild(det); cab.appendChild(plata);
+    caja.appendChild(cab);
+
+    var detalle = document.createElement('div');
+    detalle.className = 'detalle' + (mesAbiertoProy === m ? ' abierto' : '');
+    function linea(txt, valor, color) {
+      var d = document.createElement('div'); d.className = 'proyRow';
+      var izq = document.createElement('span'); izq.textContent = txt;
+      var der = document.createElement('b'); der.textContent = valor;
+      if (color) der.style.color = color;
+      d.appendChild(izq); d.appendChild(der);
+      detalle.appendChild(d);
+    }
+    linea('Ingresos', fmtARS.format(ing), 'var(--oliva)');
+    linea('Gastos fijos', fmtARS.format(fijos), 'var(--terracota)');
+    linea('Gastos variables', fmtARS.format(variables), 'var(--terracota)');
+    if (!esFuturo && (ahorro || ahorroUsd)) {
+      linea('Ahorro e inversión', (ahorro ? fmtARS.format(ahorro) : '') + (ahorro && ahorroUsd ? ' · ' : '') + (ahorroUsd ? fmtUSD.format(ahorroUsd) : ''), 'var(--ocre)');
+    }
+    evs.forEach(function (e) {
+      var esIng = String(e.tipo) === 'Ingreso';
+      var d = document.createElement('div'); d.className = 'proyRow';
+      var izq = document.createElement('span');
+      izq.textContent = '✦ ' + (e.nombre || 'Evento') + (esFuturo ? '' : ' (planeado, no sumado)') + (e._pendiente ? ' (subiendo ↑)' : '');
+      var der = document.createElement('b');
+      der.textContent = (esIng ? '+ ' : '− ') + fmtARS.format(e.monto || 0);
+      der.style.color = esIng ? 'var(--oliva)' : 'var(--terracota)';
+      d.appendChild(izq); d.appendChild(der);
+      var xE = document.createElement('button');
+      xE.type = 'button'; xE.className = 'btnX'; xE.textContent = '✕';
+      xE.title = 'Borrar este evento';
+      xE.addEventListener('click', function () {
+        if (!confirm('¿Borrar el evento "' + (e.nombre || '') + '"?')) return;
+        borrarRegistro('EVENTOS', e);
+      });
+      d.appendChild(xE);
+      detalle.appendChild(d);
+    });
+    linea('Balance' + (esFuturo ? ' proyectado' : ''), fmtARS.format(balance), balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)');
+
+    if (esFuturo) {
+      var hintP = document.createElement('p');
+      hintP.className = 'hint';
+      hintP.style.marginTop = '8px';
+      hintP.textContent = 'Ajustá la proyección de este mes como te parezca:';
+      detalle.appendChild(hintP);
+      var inputs = {};
+      [['Ingresos', 'ing', ing], ['Fijos', 'fijos', fijos], ['Variables', 'variables', variables]].forEach(function (c) {
+        var fila = document.createElement('div'); fila.className = 'presRow';
+        var lab = document.createElement('span'); lab.textContent = c[0];
+        var inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.step = '0.01'; inp.inputMode = 'decimal';
+        inp.value = Math.round(c[2]);
+        inputs[c[1]] = inp;
+        fila.appendChild(lab); fila.appendChild(inp);
+        detalle.appendChild(fila);
+      });
+      var btnP = document.createElement('button');
+      btnP.type = 'button'; btnP.className = 'btn secundario';
+      btnP.style.marginTop = '10px';
+      btnP.textContent = 'Guardar proyección de ' + nombreMes(m).split(' ')[0];
+      btnP.addEventListener('click', function () {
+        var idP = nuevoId();
+        guardar({
+          accion: 'fila', hoja: 'PROYECCION', id: idP, esquema: ESQUEMAS.PROYECCION,
+          datos: {
+            ID: idP, MES: m,
+            INGRESOS: parseFloat(inputs.ing.value) || 0,
+            FIJOS: parseFloat(inputs.fijos.value) || 0,
+            VARIABLES: parseFloat(inputs.variables.value) || 0,
+            REGISTRADO: ahora()
+          }
+        }, null, function () {});
+      });
+      detalle.appendChild(btnP);
+    } else if (esActual) {
+      var hintA = document.createElement('p');
+      hintA.className = 'hint';
+      hintA.textContent = 'Mes en curso: son los montos reales hasta hoy.';
+      detalle.appendChild(hintA);
+    }
+    caja.appendChild(detalle);
+    cab.addEventListener('click', function () {
+      mesAbiertoProy = detalle.classList.toggle('abierto') ? m : null;
+    });
+    el.appendChild(caja);
+  });
+  pintarEventos();
+}
+// ═══ Eventos proyectados ═══
+document.querySelectorAll('#evTipo button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    estado.tipoEvento = b.dataset.v;
+    document.querySelectorAll('#evTipo button').forEach(function (x) { x.classList.toggle('activo', x === b); });
+  });
+});
+$('verNuevoEvento').addEventListener('click', function () {
+  var f = $('formEvento');
+  f.hidden = !f.hidden;
+  $('verNuevoEvento').textContent = (f.hidden ? '▸' : '▾') + ' Nuevo evento';
+  if (!f.hidden) {
+    var sel = $('evMes');
+    var actual = hoyISO().slice(0, 7);
+    var previo = sel.value;
+    sel.innerHTML = '';
+    mesesVentana().filter(function (m) { return m >= actual; }).forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m; o.textContent = nombreMes(m);
+      sel.appendChild(o);
+    });
+    if (previo) sel.value = previo;
+  }
+});
+$('btnEvento').addEventListener('click', function () {
+  var nombre = $('evNombre').value.trim();
+  var monto = parseFloat($('evMonto').value);
+  if (!nombre) return aviso('error', 'Ponele un nombre al evento.');
+  if (!(monto > 0)) return aviso('error', 'Poné el monto del evento.');
+  var idE = nuevoId();
+  guardar({
+    accion: 'fila', hoja: 'EVENTOS', id: idE, esquema: ESQUEMAS.EVENTOS,
+    datos: { ID: idE, MES: $('evMes').value, NOMBRE: nombre, TIPO: estado.tipoEvento, MONTO: monto, REGISTRADO: ahora() }
+  }, null, function () { $('evNombre').value = ''; $('evMonto').value = ''; });
+});
+function pintarEventos() {
+  var el = $('listaEventos');
+  var evs = conPendientes('EVENTOS').slice().sort(function (a, b) { return String(a.mes).localeCompare(String(b.mes)); });
+  if (!evs.length) { el.className = 'vacio'; el.textContent = 'Sin eventos anotados.'; return; }
+  el.className = ''; el.innerHTML = '';
+  evs.forEach(function (e) {
+    var esIng = String(e.tipo) === 'Ingreso';
+    var div = document.createElement('div'); div.className = 'mov';
+    var det = document.createElement('div'); det.className = 'det';
+    var b = document.createElement('b'); b.textContent = '✦ ' + (e.nombre || 'Evento');
+    var s = document.createElement('small');
+    s.textContent = nombreMes(String(e.mes).slice(0, 7)) + (e._pendiente ? ' · subiendo ↑' : '');
+    det.appendChild(b); det.appendChild(s);
+    var plata = document.createElement('div');
+    plata.className = 'plata ' + (esIng ? 'ingreso' : 'gasto');
+    plata.textContent = (esIng ? '+ ' : '− ') + fmtARS.format(e.monto || 0);
+    div.appendChild(det); div.appendChild(plata);
+    var x = document.createElement('button');
+    x.type = 'button'; x.className = 'btnX'; x.textContent = '✕';
+    x.title = 'Borrar este evento';
+    x.addEventListener('click', function () {
+      if (!confirm('¿Borrar el evento "' + (e.nombre || '') + '"?')) return;
+      borrarRegistro('EVENTOS', e);
+    });
+    div.appendChild(x);
+    el.appendChild(div);
+  });
+}
+
 function sumarPor(filas, campo, valor) {
   var acc = {};
   filas.forEach(function (f) {
@@ -2245,6 +2532,7 @@ function pintarTodo() {
   pintarDeudas();
   pintarPendientes();
   if ($('p-analisis').classList.contains('activa')) pintarAnalisis();
+  if ($('p-meses').classList.contains('activa')) pintarMeses();
 }
 
 // ═══════════════ Arranque ═══════════════
