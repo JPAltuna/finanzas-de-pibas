@@ -232,6 +232,43 @@
   .presRow input { padding: 9px 10px; text-align: right; }
   .regla { margin-top: 12px; border-top: 1px dashed var(--borde); padding-top: 8px; }
   #formObjetivo { margin-top: 4px; }
+
+  /* Dashboard de meses: columnas con scroll, primera columna fija */
+  .tablaMesesWrap { overflow-x: auto; margin: 0 -6px; padding: 0 6px; }
+  .tablaMeses { border-collapse: collapse; font-size: .8rem; white-space: nowrap; }
+  .tablaMeses th, .tablaMeses td { padding: 7px 9px; text-align: right; border-bottom: 1px dashed var(--borde); }
+  .tablaMeses tr:last-child th, .tablaMeses tr:last-child td { border-bottom: none; }
+  .tablaMeses th.fijaCol {
+    position: sticky; left: 0; z-index: 2; text-align: left;
+    background: var(--crema); color: var(--suave); font-weight: 700; font-size: .74rem;
+    max-width: 110px; white-space: normal; padding-left: 2px;
+  }
+  .tablaMeses tr:first-child th { text-align: right; }
+  .tablaMeses tr:first-child th b { display: block; color: var(--tinta); font-size: .82rem; }
+  .tablaMeses tr:first-child th small { color: var(--suave); font-weight: 400; font-size: .68rem; }
+  .tablaMeses td.colProv, .tablaMeses th.colProv { background: rgba(246, 231, 169, .10); }
+  .tablaMeses tr:first-child th.colProv small { color: var(--amarillo); }
+  .tablaMeses td.colActual, .tablaMeses th.colActual { background: rgba(244, 241, 230, .09); }
+  .tablaMeses tr:first-child th.colActual b { color: var(--amarillo); }
+  .tablaMeses .filaBalance td, .tablaMeses .filaBalance th { border-top: 1.5px solid var(--borde); font-weight: 800; }
+  .tablaMeses .filaAcum td { font-weight: 700; opacity: .9; }
+  .tablaMeses td input {
+    width: 96px; padding: 6px 7px; text-align: right; font-size: .8rem;
+    border-radius: 7px 2px 7px 2px;
+  }
+
+  /* Chips de activos y filtro de plataformas (gráfico de inversiones) */
+  .chipsAct { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chipsAct button {
+    padding: 8px 13px; border-radius: 10px 3px 10px 3px; border: 1.5px solid var(--borde);
+    background: #61705f; color: var(--suave); font-weight: 700; font-size: .85rem;
+    cursor: pointer; font-family: inherit;
+  }
+  .chipsAct button.activo { background: var(--carbon); border-color: var(--carbon); color: #efe8da; }
+  .chipsAct.chica { margin-top: 10px; }
+  .chipsAct.chica button { padding: 5px 10px; font-size: .76rem; }
+  .leyGrafico { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 2px 16px; }
+  .leyGrafico .item { font-size: .78rem; }
   #sugFondo .btn { margin-top: 10px; }
   .reglaRow { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; font-size: .86rem; }
 </style>
@@ -417,6 +454,13 @@
       <div id="listaPosiciones" class="vacio">Todavía no hay inversiones cargadas.</div>
     </div>
     <div class="card">
+      <h2>Gráfico por activo</h2>
+      <p class="hint" style="margin-bottom:8px;">Elegí un activo: compras para arriba, ventas para abajo, y la línea muestra los valores que fuiste anotando.</p>
+      <div id="activosChips" class="vacio">Todavía no hay inversiones cargadas.</div>
+      <div id="filtroPlataformas" style="display:none;"></div>
+      <div id="graficoActivo"></div>
+    </div>
+    <div class="card">
       <h2>Tus movimientos</h2>
       <div class="fila2 filtros">
         <select id="vFiltroMes"></select>
@@ -470,7 +514,7 @@
   <section class="pantalla" id="p-meses">
     <div class="card">
       <h2>Mes a mes</h2>
-      <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Los 13 meses alrededor de hoy: lo que ya pasó con montos reales, y lo que viene proyectado. Tocá un mes futuro para ajustar la proyección a mano (viene precargada con tus promedios).</p>
+      <p style="font-size:.8rem;color:var(--suave);margin-bottom:8px;">Tu cashflow personal: 2 meses atrás, el actual y 7 hacia adelante. Lo que ya pasó va con montos reales; los meses teñidos son proyección — vienen con tus promedios y los editás directo en los casilleros.</p>
       <div id="listaMeses" class="vacio">Cargando…</div>
     </div>
     <div class="card">
@@ -1225,6 +1269,173 @@ function guardarValor(pos, monto) {
     }
   }, null, function () {});
 }
+// ═══ Gráfico por activo: compras ↑, ventas ↓ y línea de valores ═══
+var graficoSel = { activo: '', plataforma: '' };
+var COLORES_LINEA = ['#f6e7a9', '#ecd3a0', '#dde2d3', '#f0b9a4'];
+function fmtCorto(v, moneda) {
+  var abs = Math.abs(v);
+  var n = abs >= 1e6 ? (Math.round(abs / 1e5) / 10) + ' M' : abs >= 1e3 ? (Math.round(abs / 100) / 10) + ' k' : String(Math.round(abs));
+  return (moneda === 'USD' ? 'US$ ' : '$ ') + n;
+}
+function datosActivos() {
+  var map = {};
+  conPendientes('INVERSIONES').forEach(function (f) {
+    var nombre = String(f.activo || '').trim() || 'Sin nombre';
+    var key = (nombre + '|' + invMoneda(f)).toLowerCase();
+    var a = map[key] = map[key] || { key: key, label: nombre, moneda: invMoneda(f), plataformas: {}, filas: [] };
+    a.filas.push(f);
+    var p = String(f.plataforma || 'Sin dato').trim();
+    if (!a.plataformas[p.toLowerCase()]) a.plataformas[p.toLowerCase()] = p;
+  });
+  return map;
+}
+function pintarGraficoInversiones() {
+  var map = datosActivos();
+  var claves = Object.keys(map).sort();
+  var chips = $('activosChips');
+  var filtro = $('filtroPlataformas');
+  var cont = $('graficoActivo');
+  if (!claves.length) {
+    chips.className = 'vacio'; chips.textContent = 'Todavía no hay inversiones cargadas.';
+    filtro.style.display = 'none'; cont.innerHTML = '';
+    return;
+  }
+  if (!map[graficoSel.activo]) { graficoSel.activo = claves[0]; graficoSel.plataforma = ''; }
+  var a = map[graficoSel.activo];
+
+  chips.className = 'chipsAct'; chips.innerHTML = '';
+  claves.forEach(function (k) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = graficoSel.activo === k ? 'activo' : '';
+    b.textContent = map[k].label + (map[k].moneda === 'ARS' ? ' ($)' : '');
+    b.addEventListener('click', function () {
+      graficoSel.activo = k; graficoSel.plataforma = '';
+      pintarGraficoInversiones();
+    });
+    chips.appendChild(b);
+  });
+
+  var plats = Object.keys(a.plataformas).sort();
+  if (plats.length > 1) {
+    filtro.style.display = 'block';
+    filtro.className = 'chipsAct chica';
+    filtro.innerHTML = '';
+    [['', 'Todas']].concat(plats.map(function (p) { return [p, a.plataformas[p]]; })).forEach(function (par) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = graficoSel.plataforma === par[0] ? 'activo' : '';
+      b.textContent = par[1];
+      b.addEventListener('click', function () {
+        graficoSel.plataforma = par[0];
+        pintarGraficoInversiones();
+      });
+      filtro.appendChild(b);
+    });
+  } else {
+    filtro.style.display = 'none';
+  }
+
+  var filas = a.filas.filter(function (f) {
+    return !graficoSel.plataforma || String(f.plataforma || 'Sin dato').trim().toLowerCase() === graficoSel.plataforma;
+  });
+  var movs = filas.filter(function (f) { return String(f.tipo) !== 'Valor'; });
+  var vals = filas.filter(function (f) { return String(f.tipo) === 'Valor'; });
+
+  // Meses del gráfico: del primer movimiento hasta hoy (máx. 14 columnas)
+  var mesesSet = {};
+  filas.forEach(function (f) { var m = mesDe(f); if (m.length === 7) mesesSet[m] = true; });
+  mesesSet[hoyISO().slice(0, 7)] = true;
+  var lista = Object.keys(mesesSet).sort();
+  var meses = [];
+  var cursor = lista[0];
+  while (cursor <= lista[lista.length - 1] && meses.length < 30) {
+    meses.push(cursor);
+    var p2 = cursor.split('-');
+    var d2 = new Date(+p2[0], +p2[1], 1);
+    cursor = d2.getFullYear() + '-' + String(d2.getMonth() + 1).padStart(2, '0');
+  }
+  if (meses.length > 14) meses = meses.slice(meses.length - 14);
+  var idx = {};
+  meses.forEach(function (m, i) { idx[m] = i; });
+
+  var compras = meses.map(function () { return 0; });
+  var ventas = meses.map(function () { return 0; });
+  movs.forEach(function (f) {
+    var i = idx[mesDe(f)];
+    if (i === undefined) return;
+    if (String(f.tipo).toLowerCase() === 'venta') ventas[i] += invValor(f);
+    else compras[i] += invValor(f);
+  });
+  // Series de valores: una por plataforma (o una sola si hay filtro)
+  var series = {};
+  vals.forEach(function (f) {
+    var p = String(f.plataforma || 'Sin dato').trim();
+    (series[p] = series[p] || []).push(f);
+  });
+  var maxUp = Math.max.apply(null, compras.concat([1]));
+  Object.keys(series).forEach(function (p) {
+    series[p].forEach(function (f) { maxUp = Math.max(maxUp, invValor(f)); });
+  });
+  var maxDown = Math.max.apply(null, ventas.concat([0]));
+
+  var colW = 48, x0 = 8, W = x0 * 2 + colW * meses.length;
+  var mTop = 16, mBot = 22, H = 200;
+  var plotH = H - mTop - mBot;
+  var upH = maxDown > 0 ? plotH * (maxUp / (maxUp + maxDown)) : plotH;
+  var y0 = mTop + upH;
+  function yUp(v) { return y0 - (maxUp ? v / maxUp * upH : 0); }
+  function yDown(v) { return y0 + (maxDown ? v / maxDown * (plotH - upH) : 0); }
+  function xDe(f) {
+    var i = idx[mesDe(f)];
+    var dia = parseInt(String(f.fecha).slice(8, 10), 10) || 15;
+    return x0 + (i + dia / 31) * colW;
+  }
+
+  var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">';
+  svg += '<line x1="0" y1="' + y0 + '" x2="' + W + '" y2="' + y0 + '" stroke="#dde2d3" stroke-width="1" opacity=".55"/>';
+  meses.forEach(function (m, i) {
+    var cx = x0 + i * colW + colW / 2;
+    var p3 = m.split('-');
+    svg += '<text x="' + cx + '" y="' + (H - 7) + '" text-anchor="middle" font-size="9.5" fill="#dde2d3">' + MESES[parseInt(p3[1], 10) - 1].slice(0, 3) + (p3[1] === '01' || i === 0 ? ' ' + p3[0].slice(2) : '') + '</text>';
+    if (compras[i] > 0) svg += '<rect x="' + (cx - 16) + '" y="' + yUp(compras[i]) + '" width="14" height="' + Math.max(2, y0 - yUp(compras[i])) + '" rx="2" fill="#dce4c2"/>';
+    if (ventas[i] > 0) svg += '<rect x="' + (cx + 2) + '" y="' + (y0 + 1) + '" width="14" height="' + Math.max(2, yDown(ventas[i]) - y0) + '" rx="2" fill="#f0b9a4"/>';
+  });
+  var nombresSeries = Object.keys(series).sort();
+  nombresSeries.forEach(function (p, si) {
+    var color = COLORES_LINEA[si % COLORES_LINEA.length];
+    var pts = series[p].slice().sort(function (f1, f2) { return String(f1.fecha).localeCompare(String(f2.fecha)); });
+    var coords = pts.map(function (f) { return [xDe(f), yUp(invValor(f))]; });
+    if (coords.length > 1) {
+      svg += '<polyline points="' + coords.map(function (c) { return c[0].toFixed(1) + ',' + c[1].toFixed(1); }).join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2"/>';
+    }
+    coords.forEach(function (c) { svg += '<circle cx="' + c[0].toFixed(1) + '" cy="' + c[1].toFixed(1) + '" r="3.4" fill="' + color + '"/>'; });
+  });
+  svg += '<text x="4" y="11" font-size="9.5" fill="#dde2d3">' + fmtCorto(maxUp, a.moneda) + '</text>';
+  if (maxDown > 0) svg += '<text x="' + (W - 4) + '" y="' + (H - mBot + 10) + '" text-anchor="end" font-size="9.5" fill="#f0b9a4">−' + fmtCorto(maxDown, a.moneda) + '</text>';
+  svg += '</svg>';
+
+  cont.innerHTML = '';
+  var scroll = document.createElement('div');
+  scroll.style.cssText = 'overflow-x:auto;margin-top:10px;';
+  scroll.innerHTML = svg;
+  cont.appendChild(scroll);
+
+  var ley = document.createElement('div');
+  ley.className = 'leyenda leyGrafico';
+  var items = '<div class="item"><span class="cuadr" style="background:#dce4c2"></span>Compras</div>' +
+    (maxDown > 0 ? '<div class="item"><span class="cuadr" style="background:#f0b9a4"></span>Ventas</div>' : '');
+  if (nombresSeries.length) {
+    nombresSeries.forEach(function (p, si) {
+      items += '<div class="item"><span class="cuadr" style="background:' + COLORES_LINEA[si % COLORES_LINEA.length] + ';border-radius:99px"></span>Valor' + (nombresSeries.length > 1 || graficoSel.plataforma === '' && nombresSeries.length ? ' · ' + p : '') + '</div>';
+    });
+  } else {
+    items += '<div class="item" style="color:var(--suave)">Todavía sin valores anotados: cargalos desde "Tus inversiones" para ver la línea.</div>';
+  }
+  ley.innerHTML = items;
+  cont.appendChild(ley);
+}
+
 function pintarPosiciones() {
   var filas = conPendientes('INVERSIONES');
   var pos = {};
@@ -2173,7 +2384,7 @@ var mesAbiertoProy = null;
 function mesesVentana() {
   var hoy = new Date();
   var out = [];
-  for (var i = -6; i <= 6; i++) {
+  for (var i = -2; i <= 7; i++) {
     var d = new Date(hoy.getFullYear(), hoy.getMonth() + i, 1);
     out.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
   }
@@ -2213,6 +2424,8 @@ function realesDeMes(m) {
   });
   return r;
 }
+// Dashboard: meses como columnas (estilo cashflow), conceptos como filas.
+// Reales con fondo normal, proyectados teñidos y editables en la celda.
 function pintarMeses() {
   var el = $('listaMeses');
   var actual = hoyISO().slice(0, 7);
@@ -2220,127 +2433,162 @@ function pintarMeses() {
   var prom = promediosHistoricos();
   el.className = ''; el.innerHTML = '';
 
-  mesesVentana().forEach(function (m) {
-    var esFuturo = m > actual, esActual = m === actual;
-    var evs = eventosDeMes(m);
-    var ing, fijos, variables, ahorro = 0, ahorroUsd = 0, editado = false;
+  var meses = mesesVentana();
+  var datos = meses.map(function (m) {
+    var esFuturo = m > actual;
+    var d = { m: m, esFuturo: esFuturo, esActual: m === actual, editado: false };
     if (esFuturo) {
       var p = vig[m];
-      editado = !!p;
-      ing = p ? parseFloat(p.ingresos) || 0 : (prom ? prom.ing : 0);
-      fijos = p ? parseFloat(p.fijos) || 0 : (prom ? prom.fijos : 0);
-      variables = p ? parseFloat(p.variables) || 0 : (prom ? prom.variables : 0);
+      d.editado = !!p;
+      d.ing = p ? parseFloat(p.ingresos) || 0 : (prom ? prom.ing : 0);
+      d.fijos = p ? parseFloat(p.fijos) || 0 : (prom ? prom.fijos : 0);
+      d.variables = p ? parseFloat(p.variables) || 0 : (prom ? prom.variables : 0);
     } else {
       var r = realesDeMes(m);
-      ing = r.ing; fijos = r.fijos; variables = r.variables; ahorro = r.ahorro; ahorroUsd = r.ahorroUsd;
+      d.ing = r.ing; d.fijos = r.fijos; d.variables = r.variables;
+      d.ahorro = r.ahorro; d.ahorroUsd = r.ahorroUsd;
     }
-    var evGasto = 0, evIngreso = 0;
-    evs.forEach(function (e) {
-      var v = parseFloat(e.monto) || 0;
-      if (String(e.tipo) === 'Ingreso') evIngreso += v; else evGasto += v;
+    d.evNeto = 0;
+    eventosDeMes(m).forEach(function (e) {
+      d.evNeto += (parseFloat(e.monto) || 0) * (String(e.tipo) === 'Ingreso' ? 1 : -1);
     });
-    var balance = esFuturo ? ing - fijos - variables - evGasto + evIngreso : ing - fijos - variables;
-
-    var caja = document.createElement('div'); caja.className = 'deuda';
-    var cab = document.createElement('div'); cab.className = 'cabecera';
-    var det = document.createElement('div'); det.className = 'det';
-    var b = document.createElement('b');
-    b.textContent = nombreMes(m) + (esActual ? ' · en curso' : '');
-    var s = document.createElement('small');
-    s.textContent = (esFuturo ? (editado ? 'proyección tuya' : 'proyección (tu promedio)') : 'real') +
-      (evs.length ? ' · ' + evs.length + ' evento(s)' : '');
-    det.appendChild(b); det.appendChild(s);
-    var plata = document.createElement('div'); plata.className = 'plata';
-    plata.style.color = balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
-    if (esFuturo) plata.style.opacity = '.85';
-    plata.textContent = fmtARS.format(balance);
-    cab.appendChild(det); cab.appendChild(plata);
-    caja.appendChild(cab);
-
-    var detalle = document.createElement('div');
-    detalle.className = 'detalle' + (mesAbiertoProy === m ? ' abierto' : '');
-    function linea(txt, valor, color) {
-      var d = document.createElement('div'); d.className = 'proyRow';
-      var izq = document.createElement('span'); izq.textContent = txt;
-      var der = document.createElement('b'); der.textContent = valor;
-      if (color) der.style.color = color;
-      d.appendChild(izq); d.appendChild(der);
-      detalle.appendChild(d);
-    }
-    linea('Ingresos', fmtARS.format(ing), 'var(--oliva)');
-    linea('Gastos fijos', fmtARS.format(fijos), 'var(--terracota)');
-    linea('Gastos variables', fmtARS.format(variables), 'var(--terracota)');
-    if (!esFuturo && (ahorro || ahorroUsd)) {
-      linea('Ahorro e inversión', (ahorro ? fmtARS.format(ahorro) : '') + (ahorro && ahorroUsd ? ' · ' : '') + (ahorroUsd ? fmtUSD.format(ahorroUsd) : ''), 'var(--ocre)');
-    }
-    evs.forEach(function (e) {
-      var esIng = String(e.tipo) === 'Ingreso';
-      var d = document.createElement('div'); d.className = 'proyRow';
-      var izq = document.createElement('span');
-      izq.textContent = '✦ ' + (e.nombre || 'Evento') + (esFuturo ? '' : ' (planeado, no sumado)') + (e._pendiente ? ' (subiendo ↑)' : '');
-      var der = document.createElement('b');
-      der.textContent = (esIng ? '+ ' : '− ') + fmtARS.format(e.monto || 0);
-      der.style.color = esIng ? 'var(--oliva)' : 'var(--terracota)';
-      d.appendChild(izq); d.appendChild(der);
-      var xE = document.createElement('button');
-      xE.type = 'button'; xE.className = 'btnX'; xE.textContent = '✕';
-      xE.title = 'Borrar este evento';
-      xE.addEventListener('click', function () {
-        if (!confirm('¿Borrar el evento "' + (e.nombre || '') + '"?')) return;
-        borrarRegistro('EVENTOS', e);
-      });
-      d.appendChild(xE);
-      detalle.appendChild(d);
-    });
-    linea('Balance' + (esFuturo ? ' proyectado' : ''), fmtARS.format(balance), balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)');
-
-    if (esFuturo) {
-      var hintP = document.createElement('p');
-      hintP.className = 'hint';
-      hintP.style.marginTop = '8px';
-      hintP.textContent = 'Ajustá la proyección de este mes como te parezca:';
-      detalle.appendChild(hintP);
-      var inputs = {};
-      [['Ingresos', 'ing', ing], ['Fijos', 'fijos', fijos], ['Variables', 'variables', variables]].forEach(function (c) {
-        var fila = document.createElement('div'); fila.className = 'presRow';
-        var lab = document.createElement('span'); lab.textContent = c[0];
-        var inp = document.createElement('input');
-        inp.type = 'number'; inp.min = '0'; inp.step = '0.01'; inp.inputMode = 'decimal';
-        inp.value = Math.round(c[2]);
-        inputs[c[1]] = inp;
-        fila.appendChild(lab); fila.appendChild(inp);
-        detalle.appendChild(fila);
-      });
-      var btnP = document.createElement('button');
-      btnP.type = 'button'; btnP.className = 'btn secundario';
-      btnP.style.marginTop = '10px';
-      btnP.textContent = 'Guardar proyección de ' + nombreMes(m).split(' ')[0];
-      btnP.addEventListener('click', function () {
-        var idP = nuevoId();
-        guardar({
-          accion: 'fila', hoja: 'PROYECCION', id: idP, esquema: ESQUEMAS.PROYECCION,
-          datos: {
-            ID: idP, MES: m,
-            INGRESOS: parseFloat(inputs.ing.value) || 0,
-            FIJOS: parseFloat(inputs.fijos.value) || 0,
-            VARIABLES: parseFloat(inputs.variables.value) || 0,
-            REGISTRADO: ahora()
-          }
-        }, null, function () {});
-      });
-      detalle.appendChild(btnP);
-    } else if (esActual) {
-      var hintA = document.createElement('p');
-      hintA.className = 'hint';
-      hintA.textContent = 'Mes en curso: son los montos reales hasta hoy.';
-      detalle.appendChild(hintA);
-    }
-    caja.appendChild(detalle);
-    cab.addEventListener('click', function () {
-      mesAbiertoProy = detalle.classList.toggle('abierto') ? m : null;
-    });
-    el.appendChild(caja);
+    d.balance = d.ing - d.fijos - d.variables + (esFuturo ? d.evNeto : 0);
+    return d;
   });
+  var acum = 0;
+  datos.forEach(function (d) { acum += d.balance; d.acum = acum; });
+
+  var wrap = document.createElement('div');
+  wrap.className = 'tablaMesesWrap';
+  var tabla = document.createElement('table');
+  tabla.className = 'tablaMeses';
+
+  function celda(fila, contenido, clase) {
+    var td = document.createElement(fila === 0 ? 'th' : 'td');
+    if (clase) td.className = clase;
+    if (contenido instanceof HTMLElement) td.appendChild(contenido);
+    else td.textContent = contenido;
+    return td;
+  }
+  function filaDe(nombre, claseFila) {
+    var tr = document.createElement('tr');
+    if (claseFila) tr.className = claseFila;
+    var th = document.createElement('th');
+    th.className = 'fijaCol';
+    th.textContent = nombre;
+    tr.appendChild(th);
+    return tr;
+  }
+
+  // Cabecera: nombre del mes + real / en curso / prov.
+  var trCab = document.createElement('tr');
+  var th0 = document.createElement('th'); th0.className = 'fijaCol';
+  trCab.appendChild(th0);
+  datos.forEach(function (d) {
+    var th = document.createElement('th');
+    th.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
+    var p = d.m.split('-');
+    th.innerHTML = '<b>' + MESES[parseInt(p[1], 10) - 1].slice(0, 3) + ' ' + p[0].slice(2) + '</b><small>' +
+      (d.esActual ? 'en curso' : d.esFuturo ? (d.editado ? 'prov. tuya' : 'prov.') : 'real') + '</small>';
+    trCab.appendChild(th);
+  });
+  tabla.appendChild(trCab);
+
+  var inputsPorMes = {}; // mes -> {ing, fijos, variables}
+  [['Ingresos', 'ing', 'var(--oliva)'], ['Gastos fijos', 'fijos', 'var(--terracota)'], ['Gastos variables', 'variables', 'var(--terracota)']].forEach(function (c) {
+    var tr = filaDe(c[0]);
+    datos.forEach(function (d) {
+      var td = document.createElement('td');
+      td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
+      if (d.esFuturo) {
+        var inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.step = '1'; inp.inputMode = 'decimal';
+        inp.value = Math.round(d[c[1]]);
+        (inputsPorMes[d.m] = inputsPorMes[d.m] || {})[c[1]] = inp;
+        td.appendChild(inp);
+      } else {
+        td.textContent = fmtARS.format(d[c[1]]);
+        td.style.color = c[2];
+      }
+      tr.appendChild(td);
+    });
+    tabla.appendChild(tr);
+  });
+
+  var trEv = filaDe('Eventos ✦');
+  datos.forEach(function (d) {
+    var td = document.createElement('td');
+    td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
+    td.textContent = d.evNeto ? fmtARS.format(d.evNeto) : '—';
+    if (d.evNeto) td.style.color = d.evNeto > 0 ? 'var(--oliva)' : 'var(--terracota)';
+    trEv.appendChild(td);
+  });
+  tabla.appendChild(trEv);
+
+  var trAh = filaDe('Ahorro e inversión');
+  datos.forEach(function (d) {
+    var td = document.createElement('td');
+    td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
+    if (d.esFuturo) td.textContent = '—';
+    else {
+      td.textContent = (d.ahorro ? fmtARS.format(d.ahorro) : '') + (d.ahorro && d.ahorroUsd ? ' · ' : '') + (d.ahorroUsd ? fmtUSD.format(d.ahorroUsd) : '') || '—';
+      td.style.color = 'var(--ocre)';
+    }
+    trAh.appendChild(td);
+  });
+  tabla.appendChild(trAh);
+
+  var trBal = filaDe('Balance', 'filaBalance');
+  datos.forEach(function (d) {
+    var td = document.createElement('td');
+    td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
+    td.textContent = fmtARS.format(d.balance);
+    td.style.color = d.balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
+    trBal.appendChild(td);
+  });
+  tabla.appendChild(trBal);
+
+  var trAc = filaDe('Acumulado', 'filaAcum');
+  datos.forEach(function (d) {
+    var td = document.createElement('td');
+    td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
+    td.textContent = fmtARS.format(d.acum);
+    td.style.color = d.acum >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
+    trAc.appendChild(td);
+  });
+  tabla.appendChild(trAc);
+
+  wrap.appendChild(tabla);
+  el.appendChild(wrap);
+
+  var nota = document.createElement('p');
+  nota.className = 'hint';
+  nota.textContent = 'El acumulado arranca en ' + nombreMes(meses[0]) + '. En los meses teñidos (proyectados) podés escribir directo en los casilleros y guardar.';
+  el.appendChild(nota);
+
+  var btnG = document.createElement('button');
+  btnG.type = 'button'; btnG.className = 'btn';
+  btnG.style.marginTop = '10px';
+  btnG.textContent = 'Guardar proyección';
+  btnG.addEventListener('click', function () {
+    var cambios = 0;
+    datos.forEach(function (d) {
+      if (!d.esFuturo) return;
+      var ins = inputsPorMes[d.m];
+      var nIng = parseFloat(ins.ing.value) || 0;
+      var nFij = parseFloat(ins.fijos.value) || 0;
+      var nVar = parseFloat(ins.variables.value) || 0;
+      if (nIng === Math.round(d.ing) && nFij === Math.round(d.fijos) && nVar === Math.round(d.variables)) return;
+      cambios++;
+      var idP = nuevoId();
+      guardar({
+        accion: 'fila', hoja: 'PROYECCION', id: idP, esquema: ESQUEMAS.PROYECCION,
+        datos: { ID: idP, MES: d.m, INGRESOS: nIng, FIJOS: nFij, VARIABLES: nVar, REGISTRADO: ahora() }
+      }, null, function () {});
+    });
+    aviso(cambios ? 'ok' : 'info', cambios ? 'Proyección guardada (' + cambios + ' mes' + (cambios === 1 ? '' : 'es') + ').' : 'No cambiaste ningún casillero.');
+  });
+  el.appendChild(btnG);
   pintarEventos();
 }
 // ═══ Eventos proyectados ═══
@@ -2529,6 +2777,7 @@ function pintarTodo() {
   pintarLista('listaIngresos', conPendientes('INGRESOS'), 'ingreso', 'i');
   pintarLista('listaInversiones', conPendientes('INVERSIONES').filter(function (f) { return String(f.tipo) !== 'Valor'; }), 'inversion', 'v');
   pintarPosiciones();
+  pintarGraficoInversiones();
   pintarDeudas();
   pintarPendientes();
   if ($('p-analisis').classList.contains('activa')) pintarAnalisis();

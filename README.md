@@ -96,14 +96,23 @@ guarda el historial de valores para ver cómo se fue moviendo.
 Si el activo es una cripto conocida (BTC, ETH, USDT…), alcanza con poner
 **cuántos tokens tenés**: el precio se busca solo y el valor se calcula.
 
-## Meses: proyección y análisis intermensual
+## Meses: tu cashflow personal
 
-La pestaña **Meses** muestra los 13 meses alrededor de hoy: los que ya
-pasaron con **montos reales** (ingresos, fijos, variables, ahorro e
-inversión, balance) y los que vienen con **proyección** — precargada con
-tus promedios y editable mes por mes como quieras. Además podés anotar
-**eventos proyectados** (un viaje, un retiro, turnos médicos): gastos o
-ingresos extra puntuales que se suman a la proyección de su mes.
+La pestaña **Meses** es un tablero con los meses como columnas (2 atrás,
+el actual y 7 adelante, con scroll): lo que ya pasó con **montos reales**
+(ingresos, fijos, variables, eventos, ahorro e inversión) y lo que viene
+**proyectado** — las columnas teñidas se editan directo en los casilleros
+(vienen precargadas con tus promedios). Abajo, **Balance** y **Acumulado**
+mes a mes. Además podés anotar **eventos proyectados** (un viaje, un
+retiro, turnos médicos): gastos o ingresos extra puntuales que se suman
+a la proyección de su mes.
+
+## Gráfico por activo (inversiones)
+
+En Inversiones, elegí un activo y ves su historia en un gráfico:
+**compras hacia arriba, ventas hacia abajo**, y una **línea con los
+valores** que fuiste anotando. Si el activo está en varias plataformas,
+hay filtro (Todas / cada una) y cada plataforma lleva su propia línea.
 
 ## Objetivos financieros
 
