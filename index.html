@@ -248,8 +248,13 @@
   .tablaMeses tr:first-child th { text-align: center; }
   .tablaMeses tr:first-child th b { display: block; color: var(--tinta); font-size: .82rem; }
   .tablaMeses tr:first-child th small { color: var(--suave); font-weight: 400; font-size: .68rem; }
-  .tablaMeses td.colProv, .tablaMeses th.colProv { background: rgba(246, 231, 169, .10); }
-  .tablaMeses tr:first-child th.colProv small { color: var(--amarillo); }
+  /* Columnas proyectadas: claras a propósito (papel), con texto musgo oscuro */
+  .tablaMeses td.colProv, .tablaMeses th.colProv {
+    background: #c9d2bc; color: #3c4a3d;
+    border-bottom-color: rgba(60, 74, 61, .3);
+  }
+  .tablaMeses tr:first-child th.colProv b { color: #2d3a31; }
+  .tablaMeses tr:first-child th.colProv small { color: #8a6d1d; }
   .tablaMeses td.colActual, .tablaMeses th.colActual { background: rgba(244, 241, 230, .14); }
   .tablaMeses tr:first-child th.colActual { border-top: 3px solid var(--amarillo); border-radius: 6px 2px 0 0; }
   .tablaMeses tr:first-child th.colActual b, .tablaMeses tr:first-child th.colActual small { color: var(--amarillo); }
@@ -2506,10 +2511,11 @@ function pintarMeses() {
   });
   tabla.appendChild(trCab);
 
-  // Colores nítidos solo para el tablero (los pasteles no se leían acá)
-  var C_VERDE = '#c9e793', C_NARANJA = '#ffa055', C_DORADO = '#f0c25e';
+  // Columnas reales: pasteles de siempre. Columnas proyectadas (fondo claro):
+  // tonos oscuros — mostaza oscura, ladrillo y verde musgo — para que se lean.
+  var P_POS = '#8a6d1d', P_NEG = '#9c3f1e', P_ING = '#44632a';
   var inputsPorMes = {}; // mes -> {ing, fijos, variables}
-  [['Ingresos', 'ing', C_VERDE], ['Gastos fijos', 'fijos', C_NARANJA], ['Gastos variables', 'variables', C_NARANJA]].forEach(function (c) {
+  [['Ingresos', 'ing', 'var(--oliva)'], ['Gastos fijos', 'fijos', 'var(--terracota)'], ['Gastos variables', 'variables', 'var(--terracota)']].forEach(function (c) {
     var tr = filaDe(c[0]);
     datos.forEach(function (d) {
       var td = document.createElement('td');
@@ -2553,7 +2559,7 @@ function pintarMeses() {
     var td = document.createElement('td');
     td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
     td.textContent = fmtARS.format(d.balance);
-    td.style.color = d.balance >= 0 ? C_DORADO : C_NARANJA;
+    td.style.color = d.esFuturo ? (d.balance >= 0 ? P_POS : P_NEG) : (d.balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)');
     trBal.appendChild(td);
   });
   tabla.appendChild(trBal);
@@ -2563,7 +2569,7 @@ function pintarMeses() {
     var td = document.createElement('td');
     td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
     td.textContent = fmtARS.format(d.acum);
-    td.style.color = d.acum >= 0 ? C_DORADO : C_NARANJA;
+    td.style.color = d.esFuturo ? (d.acum >= 0 ? P_POS : P_NEG) : (d.acum >= 0 ? 'var(--amarillo)' : 'var(--terracota)');
     trAc.appendChild(td);
   });
   tabla.appendChild(trAc);
@@ -2582,7 +2588,7 @@ function pintarMeses() {
       var nom = String(e.nombre || 'Evento');
       sp.textContent = '✦ ' + (nom.length > 15 ? nom.slice(0, 14) + '…' : nom) + ' ' + (esIng ? '+' : '−') + fmtARS.format(e.monto || 0);
       sp.title = nom + ' · ' + (esIng ? 'ingreso extra' : 'gasto extra');
-      sp.style.color = esIng ? C_VERDE : C_NARANJA;
+      sp.style.color = d.esFuturo ? (esIng ? P_ING : P_NEG) : (esIng ? 'var(--oliva)' : 'var(--terracota)');
       if (!d.esFuturo) sp.style.opacity = '.6';
       td.appendChild(sp);
     });
