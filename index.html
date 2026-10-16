@@ -2506,8 +2506,10 @@ function pintarMeses() {
   });
   tabla.appendChild(trCab);
 
+  // Colores nítidos solo para el tablero (los pasteles no se leían acá)
+  var C_VERDE = '#c9e793', C_NARANJA = '#ffa055', C_DORADO = '#f0c25e';
   var inputsPorMes = {}; // mes -> {ing, fijos, variables}
-  [['Ingresos', 'ing', 'var(--oliva)'], ['Gastos fijos', 'fijos', 'var(--terracota)'], ['Gastos variables', 'variables', 'var(--terracota)']].forEach(function (c) {
+  [['Ingresos', 'ing', C_VERDE], ['Gastos fijos', 'fijos', C_NARANJA], ['Gastos variables', 'variables', C_NARANJA]].forEach(function (c) {
     var tr = filaDe(c[0]);
     datos.forEach(function (d) {
       var td = document.createElement('td');
@@ -2526,16 +2528,6 @@ function pintarMeses() {
     });
     tabla.appendChild(tr);
   });
-
-  var trEv = filaDe('Eventos ✦');
-  datos.forEach(function (d) {
-    var td = document.createElement('td');
-    td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
-    td.textContent = d.evNeto ? fmtARS.format(d.evNeto) : '—';
-    if (d.evNeto) td.style.color = d.evNeto > 0 ? 'var(--oliva)' : 'var(--terracota)';
-    trEv.appendChild(td);
-  });
-  tabla.appendChild(trEv);
 
   var trAh = filaDe('Ahorro e inversión');
   datos.forEach(function (d) {
@@ -2561,7 +2553,7 @@ function pintarMeses() {
     var td = document.createElement('td');
     td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
     td.textContent = fmtARS.format(d.balance);
-    td.style.color = d.balance >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
+    td.style.color = d.balance >= 0 ? C_DORADO : C_NARANJA;
     trBal.appendChild(td);
   });
   tabla.appendChild(trBal);
@@ -2571,10 +2563,32 @@ function pintarMeses() {
     var td = document.createElement('td');
     td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
     td.textContent = fmtARS.format(d.acum);
-    td.style.color = d.acum >= 0 ? 'var(--amarillo)' : 'var(--terracota)';
+    td.style.color = d.acum >= 0 ? C_DORADO : C_NARANJA;
     trAc.appendChild(td);
   });
   tabla.appendChild(trAc);
+
+  // Eventos con nombre y color, abajo de todo: cálido si es gasto, verde si es ingreso
+  var trEv = filaDe('Eventos ✦');
+  datos.forEach(function (d) {
+    var td = document.createElement('td');
+    td.className = (d.esFuturo ? 'colProv' : '') + (d.esActual ? ' colActual' : '');
+    var evs = eventosDeMes(d.m);
+    if (!evs.length) { td.textContent = '—'; trEv.appendChild(td); return; }
+    evs.forEach(function (e) {
+      var esIng = String(e.tipo) === 'Ingreso';
+      var sp = document.createElement('span');
+      sp.className = 'apilado';
+      var nom = String(e.nombre || 'Evento');
+      sp.textContent = '✦ ' + (nom.length > 15 ? nom.slice(0, 14) + '…' : nom) + ' ' + (esIng ? '+' : '−') + fmtARS.format(e.monto || 0);
+      sp.title = nom + ' · ' + (esIng ? 'ingreso extra' : 'gasto extra');
+      sp.style.color = esIng ? C_VERDE : C_NARANJA;
+      if (!d.esFuturo) sp.style.opacity = '.6';
+      td.appendChild(sp);
+    });
+    trEv.appendChild(td);
+  });
+  tabla.appendChild(trEv);
 
   // Nota de cierre: la "explicación" de cada mes ya vivido
   var notas = {};
